@@ -43,6 +43,11 @@ yarn-error.*
 /ios
 /android
 
+# 로컬 Expo 모듈(modules/*)의 Gradle 빌드 산출물 — 소스는 커밋, 빌드 결과는 제외
+modules/*/android/build/
+modules/*/android/.cxx/
+modules/*/android/.gradle/
+
 .claude
 .claude/
 !README.md

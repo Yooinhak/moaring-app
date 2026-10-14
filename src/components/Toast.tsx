@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 
-import { Animated, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Animated, Platform, StyleSheet, Text, ToastAndroid, TouchableOpacity, View } from 'react-native';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -132,6 +132,29 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
       </View>
     </ToastContext.Provider>
   );
+}
+
+/**
+ * 공유 시트(Android 투명 Activity) 전용 — 시스템 토스트(ToastAndroid)로 띄운다.
+ *
+ * RN 토스트는 시트(Modal) 아래에 깔리고, 저장 직후 Activity 가 닫히면 함께 사라진다.
+ * 시스템 토스트는 Activity 가 닫힌 뒤에도 공유한 앱 위에 남는다.
+ * 저장 성공 시 useCreatePost·SaveLinkSheet 가 연달아 토스트를 부르므로 같은 종류는 1.5초 내 1회만.
+ * toastBridge 에는 등록하지 않는다 — 같은 JS 런타임의 메인 앱 ToastProvider 등록을 덮어쓰면 안 됨.
+ */
+export function NativeToastProvider({ children }: { children: React.ReactNode }) {
+  const last = useRef<{ type: ToastType; at: number } | null>(null);
+
+  const showToast = useCallback((type: ToastType, message: string) => {
+    const now = Date.now();
+    if (last.current && last.current.type === type && now - last.current.at < 1500) return;
+    last.current = { type, at: now };
+    if (type === 'success') successTap();
+    else warningTap();
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+  }, []);
+
+  return <ToastContext.Provider value={{ showToast }}>{children}</ToastContext.Provider>;
 }
 
 const styles = StyleSheet.create({

@@ -41,6 +41,8 @@ interface SaveLinkSheetProps {
   onClose: () => void;
   /** 공유 인텐트로 받은 URL (없으면 자동 채움/직접 입력 모드) */
   initialUrl?: string | null;
+  /** 폴더가 하나도 없을 때 「폴더 만들러 가기」 동작 (기본: 시트 닫기 → 홈에서 만들기) */
+  onCreateFolder?: () => void;
 }
 
 type AnyFolder = {
@@ -60,7 +62,7 @@ function domainOf(url: string): string {
   }
 }
 
-export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: SaveLinkSheetProps) {
+export default function SaveLinkSheet({ visible, onClose, initialUrl = null, onCreateFolder }: SaveLinkSheetProps) {
   const { showToast } = useToast();
   const { groups, currentGroupId } = useGroup();
   const createPost = useCreatePost();
@@ -323,7 +325,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: S
       ) : (
         <View style={styles.emptyWrap}>
           <Text style={styles.emptyText}>{'아직 폴더가 없어요.\n폴더를 먼저 만들면 링크를 담을 수 있어요.'}</Text>
-          <Button size="small" onPress={onClose}>
+          <Button size="small" onPress={onCreateFolder ?? onClose}>
             폴더 만들러 가기
           </Button>
         </View>

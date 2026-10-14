@@ -20,6 +20,9 @@ const ENABLE_BY_DEFAULT = false; // Apple Developer 멤버십 가입 후 true �
 // Android release 빌드를 업로드 키로 서명하도록 build.gradle 을 손보는 config plugin.
 // (설정/키가 없으면 플러그인이 알아서 debug 키로 폴백 → 항상 안전하게 켜둬도 됨)
 const withReleaseSigning = require('./plugins/withReleaseSigning');
+// Android 공유 수신을 MainActivity → ShareSheetActivity(투명, modules/share-sheet)로 옮긴다.
+// 앱 전환 없이 공유한 앱 위에 저장 시트만 뜨게 하는 핵심. expo-share-intent 뒤에 적용돼야 함.
+const withShareSheet = require('./plugins/withShareSheet');
 
 module.exports = ({ config }) => {
   const enableShareIntent = ENABLE_BY_DEFAULT || process.env.SHARE_INTENT === '1';
@@ -40,5 +43,5 @@ module.exports = ({ config }) => {
     ];
   }
 
-  return withReleaseSigning(config);
+  return withShareSheet(withReleaseSigning(config));
 };

@@ -1,0 +1,22 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.inak.moaring'
+version = '0.1.0'
+
+android {
+  namespace "dev.inak.moaring.sharesheet"
+  defaultConfig {
+    // expo-module-gradle-plugin 이 요구 (없으면 autolinking 단계에서 실패)
+    versionCode 1
+    versionName "0.1.0"
+  }
+}
+
+dependencies {
+  // ShareSheetActivity 가 ReactActivity 를 상속 → react-android 직접 필요
+  // (expo-modules-core 는 implementation 으로만 들고 있어 전이되지 않는다)
+  implementation 'com.facebook.react:react-android'
+}
