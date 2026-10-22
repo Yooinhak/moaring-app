@@ -16,6 +16,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# .env 누락 시 실행 즉시 죽는 빌드가 나오므로 먼저 막는다 (scripts/check-env.js 참고)
+node scripts/check-env.js
+
 MODE="${1:-run}" # run | prebuild | clean
 
 if [[ "$MODE" == "clean" ]]; then

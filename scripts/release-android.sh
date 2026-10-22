@@ -22,6 +22,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# .env 누락 시 실행 즉시 죽는 빌드가 나오므로 먼저 막는다 (scripts/check-env.js 참고)
+node scripts/check-env.js
+
 VERSION="${1:-}"
 if [[ -z "$VERSION" ]]; then
   echo "❌ 버전을 넘겨주세요.  예:  bun run release:android 0.0.3"
