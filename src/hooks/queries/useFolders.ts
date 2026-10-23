@@ -72,6 +72,54 @@ export function useCreateFolder(groupId: string | null) {
   });
 }
 
+/** 폴더는 만들었지만 그 안에 링크 저장이 실패함 — 호출부가 새 폴더를 선택해 재시도를 유도한다. */
+export class FolderCreatedPostFailedError extends Error {
+  constructor(readonly folderId: number) {
+    super('POST_INSERT_FAILED');
+    this.name = 'FolderCreatedPostFailedError';
+  }
+}
+
+/**
+ * 새 폴더 생성 + 첫 링크 저장 (저장 시트의 「만들고 바로 저장」).
+ *
+ * - 그룹은 호출 시점에 고르므로 groupId 를 파라미터로 받는다 (useCreateFolder 는 훅 생성 시 고정).
+ * - retry 0: 전역 기본(mutations.retry: 1)이면 링크 저장 실패 시 mutationFn 이 다시 돌아
+ *   폴더가 중복 생성된다.
+ * - 토스트는 호출부가 결과에 맞춰 한 번만 띄운다 (공유 시트 시스템 토스트 중복 방지).
+ */
+export function useCreateFolderWithPost() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    retry: 0,
+    mutationFn: async (params: { groupId: string; name: string; color: string; emoji: string | null; url: string }) => {
+      const { data: folder, error } = await supabase
+        .from('folders')
+        .insert({ group_id: params.groupId, name: params.name, color: params.color, emoji: params.emoji })
+        .select('id')
+        .single();
+      if (error) throw error;
+
+      // posts.group_id 는 DB 트리거가 폴더 기준으로 채운다 — useCreatePost 와 같은 payload
+      const { error: postError } = await supabase
+        .from('posts')
+        .insert({ url: params.url, description: null, folder_id: folder.id });
+      if (postError) throw new FolderCreatedPostFailedError(folder.id);
+
+      return { folderId: folder.id };
+    },
+    onSuccess: ({ folderId }) => {
+      queryClient.invalidateQueries({ queryKey: [queryKeys.POST_LIST, String(folderId)] });
+    },
+    onSettled: () => {
+      // 링크 저장만 실패해도 폴더는 생겼으므로 성공/실패 모두 갱신
+      queryClient.invalidateQueries({ queryKey: [queryKeys.FOLDER_LIST] });
+      queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_ACTIVITY] });
+    },
+  });
+}
+
 export function useUpdateFolder(groupId: string | null) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();

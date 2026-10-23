@@ -110,7 +110,7 @@ function ShareContent({ sharedText }: ShareAppProps) {
     );
   }
 
-  return <SaveLinkSheet visible={visible} onClose={close} initialUrl={url} onCreateFolder={openApp} />;
+  return <SaveLinkSheet visible={visible} onClose={close} initialUrl={url} />;
 }
 
 const styles = StyleSheet.create({

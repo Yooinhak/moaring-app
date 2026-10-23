@@ -2,6 +2,8 @@ export {
   useFoldersQuery,
   useAllFoldersQuery,
   useCreateFolder,
+  useCreateFolderWithPost,
+  FolderCreatedPostFailedError,
   useUpdateFolder,
   useDeleteFolder,
   useDeferredDeleteFolder,

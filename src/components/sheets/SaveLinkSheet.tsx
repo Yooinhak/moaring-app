@@ -1,13 +1,18 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 
 import { colors, getFolderColor, moods, resolveMoodKey, typo } from '../../constants/theme';
 import { useGroup } from '../../contexts/GroupContext';
-import { useAllFoldersQuery, useCreatePost } from '../../hooks/queries';
+import {
+  FolderCreatedPostFailedError,
+  useAllFoldersQuery,
+  useCreateFolderWithPost,
+  useCreatePost,
+} from '../../hooks/queries';
 import { readClipboardUrl } from '../../utils/clipboard';
 import { getDomainInfo } from '../../utils/domainInfo';
 import { lightTap } from '../../utils/haptics';
@@ -16,12 +21,24 @@ import { queryKeys } from '../../utils/react-query/queryKeys';
 import { isValidUrl } from '../../utils/validateUrl';
 import BottomSheet from '../BottomSheet';
 import Button from '../Button';
+import { pushRecentEmoji } from '../EmojiPicker';
 import FaviconBadge from '../FaviconBadge';
-import { CheckIcon, ChevronDownIcon, ChevronRightIcon, FolderIcon, HomeIcon, LockIcon, XIcon } from '../icons';
+import {
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  FolderIcon,
+  HomeIcon,
+  LockIcon,
+  PlusIcon,
+  XIcon,
+} from '../icons';
 import Input from '../Input';
 import MoodWash from '../MoodWash';
 import Skeleton from '../Skeleton';
 import { useToast } from '../Toast';
+
+import { NewFolderNameRow, NewFolderOptions, useNewFolderDraft } from './NewFolderForm';
 
 /**
  * 링크 저장 시트 — "확인 + 위치 선택" (2026-07-16 재설계).
@@ -32,6 +49,10 @@ import { useToast } from '../Toast';
  *  - 본문: 최근 폴더(원탭) + 그룹 아코디언(접기/펼치기, 적응형 기본). 로딩 중엔 폴더
  *    스켈레톤(§3 progressive-loading — 거짓 빈 화면 방지).
  *  - 하단 고정: 「폴더명」에 저장 CTA(선택 결과 명시).
+ *
+ * 새 폴더 (2026-10-23, B안 — docs/02-design/features/share-new-folder.design.md):
+ *  - 헤더 「＋ 새 폴더」 → 같은 시트가 'create' 화면으로 바뀐다(‹/뒤로 버튼 = 선택 화면 복귀).
+ *  - 「만들고 바로 저장」 = 폴더 생성 + 링크 저장을 한 번에. 공유 시트에서 앱을 열 필요가 없다.
  */
 
 const RECENT_FOLDER_KEY = 'moaring.recentFolderId';
@@ -41,8 +62,6 @@ interface SaveLinkSheetProps {
   onClose: () => void;
   /** 공유 인텐트로 받은 URL (없으면 자동 채움/직접 입력 모드) */
   initialUrl?: string | null;
-  /** 폴더가 하나도 없을 때 「폴더 만들러 가기」 동작 (기본: 시트 닫기 → 홈에서 만들기) */
-  onCreateFolder?: () => void;
 }
 
 type AnyFolder = {
@@ -62,10 +81,13 @@ function domainOf(url: string): string {
   }
 }
 
-export default function SaveLinkSheet({ visible, onClose, initialUrl = null, onCreateFolder }: SaveLinkSheetProps) {
+export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: SaveLinkSheetProps) {
   const { showToast } = useToast();
   const { groups, currentGroupId } = useGroup();
   const createPost = useCreatePost();
+  const createFolderWithPost = useCreateFolderWithPost();
+  const draft = useNewFolderDraft();
+  const [mode, setMode] = useState<'pick' | 'create'>('pick');
 
   const { data: allFolders, isLoading } = useAllFoldersQuery(visible);
   const [url, setUrl] = useState('');
@@ -78,6 +100,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null, onC
   useEffect(() => {
     if (!visible) return;
     /* eslint-disable react-hooks/set-state-in-effect */
+    setMode('pick');
     setSelectedId(null);
     setToggles({});
     setUrl(initialUrl ?? '');
@@ -190,147 +213,268 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null, onC
     setSelectedId(id);
   };
 
+  // ── 새 폴더 (B안) ─────────────────────────────────────────
+  const editableGroups = useMemo(() => groups.filter((g) => g.role !== 'viewer'), [groups]);
+  const canCreateFolder = editableGroups.length > 0;
+  // 기본 그룹은 나의 서랍: 공유 맥락에선 앱의 "현재 그룹"이 사용자에게 보이지 않으므로,
+  // 친구들에게 실수로 노출되지 않는 쪽을 고른다. 공유 그룹은 칩으로 직접 고른다.
+  const defaultGroupId = (editableGroups.find((g) => g.type === 'personal') ?? editableGroups[0])?.id ?? null;
+
+  const openCreate = () => {
+    lightTap();
+    draft.reset(defaultGroupId);
+    setMode('create');
+  };
+
+  const backToPick = useCallback(() => {
+    Keyboard.dismiss();
+    setMode('pick');
+  }, []);
+
+  /** 선택 화면으로 돌아가며 폴더를 골라 둔다 (같은 이름 폴더가 있거나, 링크 저장만 실패한 경우) */
+  const returnWithSelection = (folderId: number, groupId: string) => {
+    Keyboard.dismiss();
+    setSelectedId(folderId);
+    setToggles((p) => ({ ...p, [groupId]: true }));
+    setMode('pick');
+  };
+
+  const canCreateAndSave = !!draft.name.trim() && !!draft.groupId && !createFolderWithPost.isPending;
+
+  const handleCreateAndSave = () => {
+    if (createFolderWithPost.isPending) return;
+    const name = draft.name.trim();
+    const groupId = draft.groupId;
+    if (!name) {
+      showToast('error', '폴더 이름을 입력해주세요');
+      return;
+    }
+    if (!groupId) {
+      showToast('error', '폴더를 만들 그룹을 골라주세요');
+      return;
+    }
+    if (!isValidUrl(trimmedUrl)) {
+      // 앱 안에서 링크를 직접 입력하는 경우 — 폴더만 생기고 링크는 없는 상태를 막는다
+      showToast('error', '저장할 링크를 먼저 확인해주세요');
+      backToPick();
+      setEditingUrl(true);
+      return;
+    }
+    const duplicate = ((allFolders ?? []) as unknown as AnyFolder[]).find(
+      (f) => f.group?.id === groupId && f.name.trim().toLowerCase() === name.toLowerCase(),
+    );
+    if (duplicate) {
+      showToast('success', `같은 이름의 「${duplicate.name}」 폴더를 골라 두었어요`);
+      returnWithSelection(duplicate.id, groupId);
+      return;
+    }
+
+    createFolderWithPost.mutate(
+      { groupId, name, color: draft.color, emoji: draft.emoji, url: trimmedUrl },
+      {
+        onSuccess: ({ folderId }) => {
+          AsyncStorage.setItem(RECENT_FOLDER_KEY, String(folderId)).catch(() => {});
+          if (draft.emoji) pushRecentEmoji(draft.emoji);
+          showToast('success', `새 폴더 「${name}」에 저장했어요`);
+          onClose();
+        },
+        onError: (err) => {
+          if (err instanceof FolderCreatedPostFailedError) {
+            // 폴더는 생겼다 — 새 폴더를 선택해 둔 채 선택 화면에서 저장만 다시 누르게 한다
+            showToast('error', '폴더는 만들었어요. 저장을 한 번 더 눌러주세요');
+            returnWithSelection(err.folderId, groupId);
+            return;
+          }
+          // 입력값은 그대로 두고 생성 화면에 머문다
+          showToast('error', '폴더를 만들지 못했어요. 다시 시도해주세요');
+        },
+      },
+    );
+  };
+
+  const isCreate = mode === 'create';
+
+  // ── 선택 화면 슬롯 ──
+  // 상단 고정: 링크 프리뷰(자동 채움) 또는 입력창
+  const pickTop = editingUrl ? (
+    <View style={styles.urlField}>
+      <Input
+        placeholder="https:// 링크를 붙여넣어주세요"
+        value={url}
+        onChangeText={setUrl}
+        onBlur={() => {
+          if (isValidUrl(url.trim())) setEditingUrl(false);
+        }}
+        autoCapitalize="none"
+        keyboardType="url"
+        autoFocus
+      />
+    </View>
+  ) : (
+    <TouchableOpacity
+      style={styles.previewCard}
+      activeOpacity={0.75}
+      onPress={() => setEditingUrl(true)}
+      accessibilityRole="button"
+      accessibilityLabel="저장할 링크 변경"
+    >
+      <FaviconBadge url={trimmedUrl} size={30} />
+      <View style={styles.previewBody}>
+        {metaLoading ? (
+          <Skeleton width="72%" height={13} borderRadius={6} />
+        ) : (
+          <Text style={styles.previewTitle} numberOfLines={1}>
+            {meta?.title || domainOf(trimmedUrl)}
+          </Text>
+        )}
+        <Text style={styles.previewDomain} numberOfLines={1}>
+          {domainOf(trimmedUrl)}
+        </Text>
+      </View>
+      <XIcon size={15} color={colors.textFaint} strokeWidth={2.2} />
+    </TouchableOpacity>
+  );
+
+  // 하단 고정: 선택 결과를 명시한 저장 CTA
+  const pickFooter =
+    hasFolders || isLoading ? (
+      <Button onPress={handleSave} loading={createPost.isPending} disabled={!canSave}>
+        {selectedFolder ? `「${selectedFolder.name}」에 저장` : '여기에 저장'}
+      </Button>
+    ) : undefined;
+
+  const pickBody = isLoading ? (
+    <FolderListSkeleton />
+  ) : hasFolders ? (
+    <>
+      {recentFolder && (
+        <View style={styles.recentWrap}>
+          <Text style={styles.capsLabel}>최근 저장</Text>
+          <FolderPickRow
+            folder={recentFolder}
+            subtitle={
+              recentFolder.group
+                ? recentFolder.group.type === 'personal'
+                  ? '나의 서랍'
+                  : recentFolder.group.name
+                : undefined
+            }
+            selected={selectedId === recentFolder.id}
+            locked={false}
+            recent
+            onPress={() => selectFolder(recentFolder.id, false)}
+          />
+        </View>
+      )}
+
+      {sections.map((section) => {
+        const expanded = isExpanded(section.id);
+        const label = section.type === 'personal' ? '나의 서랍' : section.name;
+        return (
+          <View key={section.id}>
+            <TouchableOpacity
+              style={styles.sectionRow}
+              onPress={() => toggleGroup(section.id)}
+              activeOpacity={0.6}
+              accessibilityRole="button"
+              accessibilityState={{ expanded }}
+              accessibilityLabel={`${label} 그룹, 폴더 ${section.folders.length}개, ${expanded ? '접기' : '펼치기'}`}
+            >
+              {expanded ? (
+                <ChevronDownIcon size={15} color={colors.textFaint} strokeWidth={2.4} />
+              ) : (
+                <ChevronRightIcon size={15} color={colors.textFaint} strokeWidth={2.4} />
+              )}
+              {section.type === 'personal' ? (
+                <HomeIcon size={13} color={colors.primaryDeep} strokeWidth={2.2} />
+              ) : (
+                // 그룹은 무드 세로 바로 식별 (이모지 폐지)
+                <View style={styles.sectionBarWrap}>
+                  <MoodWash
+                    colors={[
+                      moods[resolveMoodKey(section.color)].illust.pastel,
+                      moods[resolveMoodKey(section.color)].accent,
+                    ]}
+                  />
+                </View>
+              )}
+              <Text style={styles.sectionName}>{label}</Text>
+              {section.viewer && (
+                <View style={styles.viewerBadge}>
+                  <Text style={styles.viewerBadgeText}>보기 전용</Text>
+                </View>
+              )}
+              <Text style={styles.sectionCount}>{section.folders.length}</Text>
+            </TouchableOpacity>
+            {expanded &&
+              section.folders.map((f) => (
+                <FolderPickRow
+                  key={f.id}
+                  folder={f}
+                  selected={selectedId === f.id}
+                  locked={section.viewer}
+                  onPress={() => selectFolder(f.id, section.viewer)}
+                />
+              ))}
+          </View>
+        );
+      })}
+    </>
+  ) : (
+    <View style={styles.emptyWrap}>
+      <Text style={styles.emptyText}>{'아직 폴더가 없어요.\n새 폴더를 만들어 바로 저장해 보세요.'}</Text>
+      <Button size="small" onPress={canCreateFolder ? openCreate : onClose}>
+        새 폴더 만들기
+      </Button>
+    </View>
+  );
+
+  // BottomSheet 는 하나로 유지하고 슬롯만 바꿔 끼운다 — 화면 전환 시 시트가 닫혔다 열리지 않음
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title="어디에 저장할까요?"
-      // ── 상단 고정: 링크 프리뷰(자동 채움) 또는 입력창 ──
-      fixedTop={
-        editingUrl ? (
-          <View style={styles.urlField}>
-            <Input
-              placeholder="https:// 링크를 붙여넣어주세요"
-              value={url}
-              onChangeText={setUrl}
-              onBlur={() => {
-                if (isValidUrl(url.trim())) setEditingUrl(false);
-              }}
-              autoCapitalize="none"
-              keyboardType="url"
-              autoFocus
-            />
-          </View>
+      title={isCreate ? '새 폴더' : '어디에 저장할까요?'}
+      onBack={isCreate ? backToPick : undefined}
+      headerRight={!isCreate && canCreateFolder ? <NewFolderButton onPress={openCreate} /> : undefined}
+      fixedTop={isCreate ? <NewFolderNameRow draft={draft} onSubmit={handleCreateAndSave} /> : pickTop}
+      footer={
+        isCreate ? (
+          <Button onPress={handleCreateAndSave} loading={createFolderWithPost.isPending} disabled={!canCreateAndSave}>
+            만들고 바로 저장
+          </Button>
         ) : (
-          <TouchableOpacity
-            style={styles.previewCard}
-            activeOpacity={0.75}
-            onPress={() => setEditingUrl(true)}
-            accessibilityRole="button"
-            accessibilityLabel="저장할 링크 변경"
-          >
-            <FaviconBadge url={trimmedUrl} size={30} />
-            <View style={styles.previewBody}>
-              {metaLoading ? (
-                <Skeleton width="72%" height={13} borderRadius={6} />
-              ) : (
-                <Text style={styles.previewTitle} numberOfLines={1}>
-                  {meta?.title || domainOf(trimmedUrl)}
-                </Text>
-              )}
-              <Text style={styles.previewDomain} numberOfLines={1}>
-                {domainOf(trimmedUrl)}
-              </Text>
-            </View>
-            <XIcon size={15} color={colors.textFaint} strokeWidth={2.2} />
-          </TouchableOpacity>
+          pickFooter
         )
       }
-      // ── 하단 고정: 선택 결과를 명시한 저장 CTA ──
-      footer={
-        hasFolders || isLoading ? (
-          <Button onPress={handleSave} loading={createPost.isPending} disabled={!canSave}>
-            {selectedFolder ? `「${selectedFolder.name}」에 저장` : '여기에 저장'}
-          </Button>
-        ) : undefined
-      }
     >
-      {isLoading ? (
-        <FolderListSkeleton />
-      ) : hasFolders ? (
-        <>
-          {recentFolder && (
-            <View style={styles.recentWrap}>
-              <Text style={styles.capsLabel}>최근 저장</Text>
-              <FolderPickRow
-                folder={recentFolder}
-                subtitle={
-                  recentFolder.group
-                    ? recentFolder.group.type === 'personal'
-                      ? '나의 서랍'
-                      : recentFolder.group.name
-                    : undefined
-                }
-                selected={selectedId === recentFolder.id}
-                locked={false}
-                recent
-                onPress={() => selectFolder(recentFolder.id, false)}
-              />
-            </View>
-          )}
-
-          {sections.map((section) => {
-            const expanded = isExpanded(section.id);
-            const label = section.type === 'personal' ? '나의 서랍' : section.name;
-            return (
-              <View key={section.id}>
-                <TouchableOpacity
-                  style={styles.sectionRow}
-                  onPress={() => toggleGroup(section.id)}
-                  activeOpacity={0.6}
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded }}
-                  accessibilityLabel={`${label} 그룹, 폴더 ${section.folders.length}개, ${expanded ? '접기' : '펼치기'}`}
-                >
-                  {expanded ? (
-                    <ChevronDownIcon size={15} color={colors.textFaint} strokeWidth={2.4} />
-                  ) : (
-                    <ChevronRightIcon size={15} color={colors.textFaint} strokeWidth={2.4} />
-                  )}
-                  {section.type === 'personal' ? (
-                    <HomeIcon size={13} color={colors.primaryDeep} strokeWidth={2.2} />
-                  ) : (
-                    // 그룹은 무드 세로 바로 식별 (이모지 폐지)
-                    <View style={styles.sectionBarWrap}>
-                      <MoodWash
-                        colors={[
-                          moods[resolveMoodKey(section.color)].illust.pastel,
-                          moods[resolveMoodKey(section.color)].accent,
-                        ]}
-                      />
-                    </View>
-                  )}
-                  <Text style={styles.sectionName}>{label}</Text>
-                  {section.viewer && (
-                    <View style={styles.viewerBadge}>
-                      <Text style={styles.viewerBadgeText}>보기 전용</Text>
-                    </View>
-                  )}
-                  <Text style={styles.sectionCount}>{section.folders.length}</Text>
-                </TouchableOpacity>
-                {expanded &&
-                  section.folders.map((f) => (
-                    <FolderPickRow
-                      key={f.id}
-                      folder={f}
-                      selected={selectedId === f.id}
-                      locked={section.viewer}
-                      onPress={() => selectFolder(f.id, section.viewer)}
-                    />
-                  ))}
-              </View>
-            );
-          })}
-        </>
+      {isCreate ? (
+        <NewFolderOptions
+          draft={draft}
+          groups={groups}
+          onLockedGroup={() => showToast('error', '보기 전용 그룹이에요')}
+        />
       ) : (
-        <View style={styles.emptyWrap}>
-          <Text style={styles.emptyText}>{'아직 폴더가 없어요.\n폴더를 먼저 만들면 링크를 담을 수 있어요.'}</Text>
-          <Button size="small" onPress={onCreateFolder ?? onClose}>
-            폴더 만들러 가기
-          </Button>
-        </View>
+        pickBody
       )}
     </BottomSheet>
+  );
+}
+
+/** 선택 화면 헤더 오른쪽 「＋ 새 폴더」 */
+function NewFolderButton({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity
+      style={styles.newFolderBtn}
+      onPress={onPress}
+      hitSlop={8}
+      activeOpacity={0.7}
+      accessibilityRole="button"
+      accessibilityLabel="새 폴더 만들기"
+    >
+      <PlusIcon size={13} color={colors.primaryDeep} strokeWidth={2.6} />
+      <Text style={styles.newFolderText}>새 폴더</Text>
+    </TouchableOpacity>
   );
 }
 
@@ -403,6 +547,16 @@ function FolderPickRow({
 }
 
 const styles = StyleSheet.create({
+  newFolderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    height: 30,
+    paddingHorizontal: 11,
+    borderRadius: 15,
+    backgroundColor: colors.primaryTint,
+  },
+  newFolderText: { fontSize: 13, fontFamily: 'LINESeedKR-Bold', color: colors.primaryDeep },
   urlField: {
     marginTop: 4,
   },
