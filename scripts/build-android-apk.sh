@@ -23,6 +23,9 @@ MODE="${1:-run}" # run | prebuild | clean
 
 if [[ "$MODE" == "clean" ]]; then
   echo "🧹 SHARE_INTENT=1 prebuild --clean (android/ 재생성)"
+  # Finder 창이 android/ 안을 열고 있으면, 지우는 사이 .DS_Store 를 다시 써서
+  # prebuild --clean 이 ENOTEMPTY 로 실패한다 → 먼저 직접 지운다(재시도 3회).
+  for _ in 1 2 3; do rm -rf android 2>/dev/null && break; sleep 1; done
   SHARE_INTENT=1 npx expo prebuild -p android --clean
 elif [[ "$MODE" == "prebuild" ]]; then
   echo "🔧 SHARE_INTENT=1 prebuild (설정 동기화)"
@@ -63,7 +66,11 @@ APK="android/app/build/outputs/apk/release/app-release.apk"
 echo ""
 echo "✅ APK 완성: $APK ($(du -h "$APK" | cut -f1))"
 
-# macOS 면 Finder 에서 위치 열기
+# Finder 로는 android/ 밖의 dist/ 복사본을 연다. android/ 안을 열어두면 다음 clean 빌드가
+# 그 창이 써넣는 .DS_Store 때문에 android/ 를 못 지우고 실패한다.
+DIST="dist/모아링_$(node -p "require('./app.json').expo.version").apk"
+mkdir -p dist && cp "$APK" "$DIST"
+echo "📦 로컬 사본: $DIST"
 if [[ "$(uname)" == "Darwin" ]]; then
-  open -R "$APK"
+  open -R "$DIST"
 fi
