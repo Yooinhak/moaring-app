@@ -35,3 +35,35 @@ if (missing.length > 0) {
 }
 
 console.log('🔑 필수 환경 변수 확인: ' + REQUIRED.join(', '));
+
+/**
+ * 값이 "있는지"만으로는 부족하다 — 2026-10-25 0.0.7 은 anon 키 끝에 2글자가 잘못 붙은 채 배포돼
+ * 앱은 켜지지만 로그인 직후 Supabase 가 401 Invalid API key 로 거절했다.
+ * 그래서 빌드 전에 키를 실제 Supabase 에 한 번 대본다 (읽기 전용 /auth/v1/settings).
+ * - 401/403 → 키가 틀림 → 빌드 중단
+ * - 네트워크 오류·타임아웃 → 오프라인 빌드일 수 있으니 경고만 하고 진행
+ */
+async function verifyAnonKey() {
+  const url = (process.env.EXPO_PUBLIC_SUPABASE_URL || fileEnv.EXPO_PUBLIC_SUPABASE_URL).replace(/\/$/, '');
+  const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY || fileEnv.EXPO_PUBLIC_SUPABASE_ANON_KEY;
+  let res;
+  try {
+    res = await fetch(url + '/auth/v1/settings', { headers: { apikey: key }, signal: AbortSignal.timeout(8000) });
+  } catch (e) {
+    console.warn('⚠️  Supabase 키를 서버에 확인하지 못했어요(' + (e.cause?.code || e.name) + ') — 오프라인이면 무시해도 됩니다.');
+    return;
+  }
+  if (res.status === 401 || res.status === 403) {
+    console.error('❌ EXPO_PUBLIC_SUPABASE_ANON_KEY 를 Supabase 가 거절했어요 (HTTP ' + res.status + ' Invalid API key).');
+    console.error('   Supabase 대시보드(Project Settings → API Keys)의 anon 키를 그대로 복사해 넣어 주세요.');
+    console.error('   이대로 빌드하면 앱은 켜지지만 로그인과 모든 데이터 조회가 실패합니다.');
+    process.exit(1);
+  }
+  if (!res.ok) {
+    console.warn('⚠️  Supabase 키 확인 응답이 예상과 달라요(HTTP ' + res.status + ') — 빌드는 계속합니다.');
+    return;
+  }
+  console.log('🔑 Supabase 가 anon 키를 정상으로 인정했어요');
+}
+
+verifyAnonKey();
