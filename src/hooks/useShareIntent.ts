@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 import { useShareIntentContext } from 'expo-share-intent';
 
-import { isValidUrl } from '../utils/validateUrl';
+import { extractUrl } from '../utils/extractUrl';
 
 /**
  * 외부 앱에서 공유받은 URL을 추출하여 반환합니다.
@@ -25,9 +25,9 @@ export function useShareIntent() {
   useEffect(() => {
     if (!hasShareIntent || !shareIntent) return;
 
-    const url = shareIntent.webUrl || shareIntent.text || '';
+    const url = extractUrl(shareIntent.webUrl || shareIntent.text);
 
-    if (!url || !isValidUrl(url)) {
+    if (!url) {
       resetShareIntent();
       return;
     }
