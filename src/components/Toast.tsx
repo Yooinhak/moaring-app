@@ -9,6 +9,7 @@ import { successTap, warningTap } from '../utils/haptics';
 import { registerErrorToast } from '../utils/toastBridge';
 
 import { CheckIcon, XIcon } from './icons';
+import { SheetOverlayContext } from './sheetOverlay';
 
 type ToastType = 'success' | 'error';
 
@@ -155,6 +156,41 @@ export function NativeToastProvider({ children }: { children: React.ReactNode })
   }, []);
 
   return <ToastContext.Provider value={{ showToast }}>{children}</ToastContext.Provider>;
+}
+
+/**
+ * iOS 공유 확장 전용 — 토스트를 BottomSheet(Modal) 안 오버레이로 띄운다.
+ *
+ * 일반 ToastProvider 는 시트(Modal) 아래에 깔려 안 보이고, iOS 에는 시스템 토스트가 없다.
+ * toastBridge 에는 등록하지 않는다 — 확장 안에는 메인 앱 ToastProvider 가 없어 대상이 없음.
+ */
+export function ExtensionToastProvider({ children }: { children: React.ReactNode }) {
+  const insets = useSafeAreaInsets();
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const showToast = useCallback((type: ToastType, message: string, options?: { action?: ToastAction; duration?: number }) => {
+    if (type === 'success') successTap();
+    else warningTap();
+    setToasts((prev) => [...prev, { id: ++toastId, type, message, action: options?.action, duration: options?.duration }]);
+  }, []);
+
+  const handleDone = useCallback((id: number) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const overlay = toasts.length ? (
+    <View style={[styles.container, { top: insets.top + 8 }]} pointerEvents="box-none">
+      {toasts.map((t) => (
+        <ToastItem key={t.id} toast={t} onDone={handleDone} />
+      ))}
+    </View>
+  ) : null;
+
+  return (
+    <ToastContext.Provider value={{ showToast }}>
+      <SheetOverlayContext.Provider value={overlay}>{children}</SheetOverlayContext.Provider>
+    </ToastContext.Provider>
+  );
 }
 
 const styles = StyleSheet.create({

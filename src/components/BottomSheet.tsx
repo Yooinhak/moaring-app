@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, radius, shadows } from '../constants/theme';
 
 import { ChevronLeftIcon } from './icons';
+import { useSheetOverlay } from './sheetOverlay';
 
 /**
  * 공용 바텀시트 — @gorhom/bottom-sheet 의 "인라인" 컴포넌트(기본 export) 구현.
@@ -92,6 +93,7 @@ export default function BottomSheet({
 
   // visible=true 일 때만 실제로 마운트(그래야 index=0 으로 열림). 닫힘은 애니메이션 후 언마운트.
   const [rendered, setRendered] = useState(visible);
+  const overlay = useSheetOverlay();
   const [topHeight, setTopHeight] = useState(0);
   const [contentHeight, setContentHeight] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
@@ -282,6 +284,7 @@ export default function BottomSheet({
             )}
           </View>
         </BottomSheetInline>
+        {overlay}
       </GestureHandlerRootView>
     </Modal>
   );
