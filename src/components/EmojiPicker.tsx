@@ -3,17 +3,17 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 
 import { BottomSheetTextInput, useBottomSheetInternal } from '@gorhom/bottom-sheet';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { EMOJI_DATA } from '../constants/emojiData';
 import { colors } from '../constants/theme';
 import { lightTap } from '../utils/haptics';
+import { appStorage } from '../utils/storage/appStorage';
 
 import { CheckIcon, SearchIcon, XIcon } from './icons';
 
 /**
  * 폴더/그룹 공용 이모지 피커 — 의존성 없는 인앱 큐레이션 그리드.
- * - 최근 사용(AsyncStorage) + 추천 그리드 + 한글 검색 + "이모지 없음" + 직접 입력 fallback.
+ * - 최근 사용(appStorage) + 추천 그리드 + 한글 검색 + "이모지 없음" + 직접 입력 fallback.
  * - 이모지는 선택 사항이므로 value=null 을 허용한다.
  * - EMOJI_DATA 는 constants/emojiData.ts 로 추출(자동추천 로직과 공유, 2026-07-15).
  */
@@ -34,10 +34,10 @@ interface EmojiPickerProps {
 /** 최근 사용 이모지 앞에 추가 (중복 제거, 최대 MAX_RECENT). */
 export async function pushRecentEmoji(emoji: string) {
   try {
-    const raw = await AsyncStorage.getItem(RECENT_EMOJI_KEY);
+    const raw = await appStorage.getItem(RECENT_EMOJI_KEY);
     const prev: string[] = raw ? JSON.parse(raw) : [];
     const next = [emoji, ...prev.filter((e) => e !== emoji)].slice(0, MAX_RECENT);
-    await AsyncStorage.setItem(RECENT_EMOJI_KEY, JSON.stringify(next));
+    await appStorage.setItem(RECENT_EMOJI_KEY, JSON.stringify(next));
   } catch {
     // 무시 — 최근 목록은 부가 기능
   }
@@ -51,7 +51,8 @@ export default function EmojiPicker({ value, onSelect, label = '이모지 (선�
   const [recent, setRecent] = useState<string[]>([]);
 
   useEffect(() => {
-    AsyncStorage.getItem(RECENT_EMOJI_KEY)
+    appStorage
+      .getItem(RECENT_EMOJI_KEY)
       .then((raw) => {
         if (raw) setRecent(JSON.parse(raw));
       })
