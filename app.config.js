@@ -42,6 +42,8 @@ module.exports = ({ config }) => {
 
     config.plugins = [
       ...(config.plugins ?? []),
+      // 확장 타깃은 임베드 폰트만 쓸 수 있다 (scripts/rename-ios-fonts.py 참고)
+      ['expo-font', { fonts: ['./assets/fonts/ios/LINESeedKR.ttf', './assets/fonts/ios/LINESeedKR-Bold.ttf'] }],
       [
         'expo-share-extension',
         {
