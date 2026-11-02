@@ -193,6 +193,8 @@ AppRegistry.registerComponent('shareExtension', () => ShareExtensionRoot);
 
 - [ ] **Step 7: `scripts/build-ios-sim-share.sh` 생성 + 실행 권한**
 
+> 실행 메모 (2026-11-03): Xcode 27.2 에는 Simulator.app 이 없어 `expo run:ios` 가 실패한다. 실제 스크립트는 `xcodebuild` + `simctl` 로 빌드·설치하고 기본 `CONFIG=Release` (Debug 는 `npx expo start` 필요). Pods 보정은 `plugins/withPodsDeploymentTarget.js`. 확장 번들 ID 는 `dev.inak.moaring.ShareExtension`. 스파이크 D2 에서 미등록 폰트 텍스트가 **보이지 않음** → Task 6 필수. 상세는 스파이크 문서.
+
 ```bash
 #!/usr/bin/env bash
 # ─────────────────────────────────────────────────────────────
