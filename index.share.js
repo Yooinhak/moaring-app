@@ -1,3 +1,4 @@
+import './src/share/patchTextForExtension'; // 반드시 첫 import — 확장 텍스트 폰트 스케일 보정
 import { AppRegistry } from 'react-native';
 
 import ShareExtensionRoot from './src/share/ShareExtensionRoot';
