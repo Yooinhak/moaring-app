@@ -154,6 +154,20 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 - Sentry 소스맵 업로드 기본 비활성 (`SENTRY_UPLOAD=1`로 활성화)
 - APK 완성 시 경로 출력 + Finder 표시
 
+### iOS 공유 확장 (Apple Developer 멤버십 전: 시뮬레이터 전용)
+
+| 상황 | 명령 |
+| --- | --- |
+| 최초 / 플러그인·네이티브 모듈 변경 | `bun run ios:sim:share:prebuild` |
+| JS 만 수정 | `bun run ios:sim:share` |
+| Debug 빌드 (Metro 필요) | `npx expo start` 띄운 뒤 `CONFIG=Debug bun run ios:sim:share` |
+
+- `IOS_SHARE_EXT=1` 일 때만 Share Extension 타깃 생성. 실기기 `ios:release` 로 돌아갈 땐 `bun run ios:release:clean` 필수 (무료 Personal Team 은 App Group 불가).
+- Xcode 27 에는 Simulator.app 이 없어(DeviceHub) `expo run:ios` 대신 `xcodebuild` + `simctl` 로 빌드·설치한다. 시뮬레이터 기본값 `SIM="iPhone 17 Pro"`.
+- 세션·현재 그룹·최근 폴더는 `appStorage`(iOS: App Group `group.dev.inak.moaring`)에 저장 — 확장과 공유.
+- 확장 폰트는 `assets/fonts/ios/` 임베드본 (`scripts/rename-ios-fonts.py`).
+- 테스트: `bun run test` (jest-expo)
+
 <br />
 
 ## 📄 라이선스
