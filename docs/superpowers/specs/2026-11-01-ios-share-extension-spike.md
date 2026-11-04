@@ -26,11 +26,11 @@
 | --- | --- | --- |
 | 1 | Safari 공유 → 폴더 선택 → 저장 | ✅ 시트 닫히고 Safari 복귀, 앱에 링크 반영 |
 | 2 | 로그인 세션 공유 (App Group) | ✅ 확장에서 나의 서랍 폴더 목록 로드 |
-| 3 | "+ 새 폴더" 빈 이름 → 에러 토스트가 시트 위에 | 미확인 (UI 자동화 도구 없음) |
-| 4 | 앱 완전 종료 상태에서 공유 → 저장 | 미확인 |
-| 5 | 메모 "hello" 공유 → "링크만 저장할 수 있어요" | 미확인 (`extractUrl` 단위 테스트 통과) |
-| 6 | URL 포함 텍스트 공유 → URL 추출 | 미확인 (`extractUrl` 단위 테스트 통과) |
-| 7 | 로그아웃 상태 공유 → "로그인이 필요해요" → "모아링 열기" | 미확인 |
+| 3 | 에러 토스트가 시트 위에 | ✅ 잘못된 URL 저장 시 "올바른 URL 형식이 아니에요" 시트 위 표시. 단 상태바와 살짝 겹침(확장 상단 inset). 새 폴더 빈 이름은 버튼 비활성이라 토스트 경로 없음 (Android 동일) |
+| 4 | 앱 완전 종료 상태에서 공유 | ✅ 시트·폴더 목록 정상 |
+| 5 | URL 없는 텍스트 공유 → "링크만 저장할 수 있어요" | ✅ Safari 텍스트 선택 "domain" 공유 |
+| 6 | URL 포함 텍스트 공유 → URL 추출 | ✅ Web Share `"이거 봐봐 https://example.org/e2e-test 진짜 좋아"` → example.org 미리보기 |
+| 7 | 로그아웃 상태 공유 → "로그인이 필요해요" → "모아링 열기" | ✅ (수정 후) 앱 열림. 처음엔 확장 크래시 — 아래 참고 |
 | 8 | 하루 뒤 토큰 갱신 | 미확인 (장기) |
 
 ## Xcode 27 대응 (실기기 빌드에도 해당)
@@ -39,6 +39,12 @@
 2. **Pods 컴파일 실패** — `plugins/withPodsDeploymentTarget.js` 가 Podfile `post_install` 에서 보정.
    - 배포 타깃 < 15.1 이 에러로 바뀜 (Sentry 11.0, RNSVGFilters 12.4, SDWebImage 9.0, RNCAsyncStorage 리소스 13.4) → 15.1 로 올림.
    - fmt 11.0.2 `call to consteval function ... is not a constant expression` → fmt 타깃만 C++17.
+
+검증 방법: AXe(`axe touch --down --up --delay 0.15`, `axe drag`)로 시뮬레이터 조작. 로그아웃은 App Group 의 `sb-…-auth-token` 키를 `simctl spawn defaults export/delete/import` 로 잠시 지웠다 복원.
+
+### "모아링 열기" 크래시
+
+`openHostApp('')` → 네이티브 `ShareExtensionViewController.openHostApp` 가 `"".split("?")[0]` 을 읽다 `Index out of range` (SIGTRAP). expo-share-extension 5.0.6 버그. `openHostApp('/')` 로 회피 (`moaring:///`).
 
 ## 측정 방법
 
