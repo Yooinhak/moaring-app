@@ -9,6 +9,9 @@
 #
 #   기기명 바꾸려면: DEVICE="다른 iPhone" bun run ios:release
 #
+# Sentry 소스맵·디버그 심볼 업로드는 기본 비활성 (auth token 없이 빌드 가능, Android 스크립트와 동일).
+#   업로드하려면: SENTRY_UPLOAD=1 bun run ios:release
+#
 # --clean 시 ios/Podfile.properties.json 의 buildReactNativeFromSource 키가
 # 날아가는 문제(→ "No script URL" 재발)를 자동으로 복구한다. (research.md 참고)
 # ─────────────────────────────────────────────────────────────
@@ -41,6 +44,11 @@ if [[ "$MODE" == "clean" || "$MODE" == "prebuild" ]]; then
     fs.writeFileSync(f, JSON.stringify(j, null, 2) + '\n');
   "
   npx pod-install
+fi
+
+# Xcode 의 Sentry 빌드 단계(소스맵·dSYM 업로드)는 토큰이 없으면 빌드를 실패시킨다
+if [[ "${SENTRY_UPLOAD:-}" != "1" ]]; then
+  export SENTRY_DISABLE_AUTO_UPLOAD=true
 fi
 
 echo "📱 Release 빌드 → \"$DEVICE\""
