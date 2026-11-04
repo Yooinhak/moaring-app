@@ -14,6 +14,8 @@ export interface DomainInfo {
   label: string;
   /** 파비콘 이미지 URL (64px PNG) */
   faviconUrl: string;
+  /** 전용 앱이 있는 서비스 — 인앱 브라우저 대신 시스템에 넘겨 앱으로 연다 (utils/openLink) */
+  opensInApp: boolean;
 }
 
 interface ServiceRule {
@@ -21,6 +23,12 @@ interface ServiceRule {
   /** 파비콘 조회용 대표 도메인 (미지정 시 hostname 그대로) */
   faviconDomain?: string;
   label: string;
+  /**
+   * 링크를 해당 서비스 앱으로 열지 여부.
+   * 인앱 브라우저(SFSafariViewController·Custom Tabs)는 유니버설/앱 링크를 앱에 넘기지 않아
+   * 앱이 설치돼 있어도 웹으로 열리고, 웹에선 로그인을 다시 요구하는 경우가 많다.
+   */
+  opensInApp?: boolean;
 }
 
 const SERVICE_RULES: ServiceRule[] = [
@@ -28,11 +36,13 @@ const SERVICE_RULES: ServiceRule[] = [
     test: (h) => h === 'youtu.be' || h === 'youtube.com' || h.endsWith('.youtube.com'),
     faviconDomain: 'youtube.com',
     label: 'YouTube',
+    opensInApp: true,
   },
   {
     test: (h) => h === 'instagram.com' || h.endsWith('.instagram.com'),
     faviconDomain: 'instagram.com',
     label: 'Instagram',
+    opensInApp: true,
   },
   {
     test: (h) => h === 'blog.naver.com' || h === 'm.blog.naver.com',
@@ -72,6 +82,7 @@ const SERVICE_RULES: ServiceRule[] = [
     test: (h) => h === 'threads.net' || h === 'threads.com' || h.endsWith('.threads.net'),
     faviconDomain: 'threads.net',
     label: 'Threads',
+    opensInApp: true,
   },
   {
     test: (h) => h === 'facebook.com' || h.endsWith('.facebook.com') || h === 'fb.com',
@@ -119,5 +130,6 @@ export function getDomainInfo(url: string): DomainInfo | null {
     hostname,
     label: rule?.label ?? hostname,
     faviconUrl: faviconServiceUrl(faviconDomain),
+    opensInApp: rule?.opensInApp ?? false,
   };
 }

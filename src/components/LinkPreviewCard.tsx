@@ -4,7 +4,6 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
   Extrapolation,
@@ -20,6 +19,7 @@ import { colors, glass, shadows } from '../constants/theme';
 import { useDeferredDeletePost } from '../hooks/queries';
 import { getDomainInfo } from '../utils/domainInfo';
 import { mediumTap, selectionTap, warningTap } from '../utils/haptics';
+import { openLink } from '../utils/openLink';
 import { parseMetadata } from '../utils/parseMetadata';
 import { queryKeys } from '../utils/react-query/queryKeys';
 import { relativeTime } from '../utils/relativeTime';
@@ -205,7 +205,7 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
     viewMode === 'compact' ? (
       <TouchableOpacity
         style={compactStyles.card}
-        onPress={() => WebBrowser.openBrowserAsync(url)}
+        onPress={() => openLink(url)}
         onLongPress={canEdit ? handleLongPress : undefined}
         delayLongPress={280}
         activeOpacity={0.6}
@@ -269,7 +269,7 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
     ) : (
       <TouchableOpacity
         style={styles.card}
-        onPress={() => WebBrowser.openBrowserAsync(url)}
+        onPress={() => openLink(url)}
         onLongPress={canEdit ? handleLongPress : undefined}
         delayLongPress={280}
         activeOpacity={0.6}
