@@ -7,7 +7,7 @@ import { getDomainInfo } from './domainInfo';
 /**
  * 저장된 링크 열기.
  *
- * - 전용 앱이 있는 서비스(인스타그램·유튜브·스레드 — domainInfo 의 opensInApp):
+ * - 전용 앱이 있는 서비스(domainInfo 의 opensInApp 플래그 — 인스타그램·유튜브·스레드·틱톡·쿠팡 등):
  *   시스템에 넘긴다(Linking.openURL). 앱이 설치돼 있으면 앱이, 없으면 기본 브라우저가 열린다.
  * - 그 외 일반 웹페이지: 앱을 떠나지 않도록 인앱 브라우저로 연다.
  *

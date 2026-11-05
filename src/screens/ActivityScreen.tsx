@@ -5,7 +5,6 @@ import { SectionList, StyleSheet, Text, TouchableOpacity, View } from 'react-nat
 import { BottomTabNavigationProp } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQuery } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Avatar } from '../components/AvatarStack';
@@ -20,8 +19,6 @@ import { type ActivityFeedItem, useActivityFeedQuery } from '../hooks/queries';
 import { useActivityUnread } from '../hooks/useActivityUnread';
 import { MainStackParamList, TabParamList } from '../navigation/types';
 import { getDomainInfo } from '../utils/domainInfo';
-import { parseMetadata } from '../utils/parseMetadata';
-import { queryKeys } from '../utils/react-query/queryKeys';
 import { relativeTime } from '../utils/relativeTime';
 
 /**
@@ -57,12 +54,12 @@ function domainOf(url: string): string {
   }
 }
 
+/**
+ * 피드 한 행. 제목은 서버가 저장 시점에 수집해 둔 posts.preview_title 을 그대로 쓴다 —
+ * 행마다 기기에서 메타를 긁던 시절(Microlink 5회/일 → 429) 과 달리 네트워크 호출이 없고,
+ * 아직 수집 전이거나 실패한 글은 도메인 라벨로 멀쩡히 보인다.
+ */
 function ActivityRow({ item, onPress }: { item: ActivityFeedItem; onPress: () => void }) {
-  const { data: meta } = useQuery({
-    queryKey: [queryKeys.METADATA, item.url],
-    queryFn: () => parseMetadata(item.url),
-    enabled: !!item.url,
-  });
   const name = item.displayName ?? '멤버';
   const domain = domainOf(item.url);
 
@@ -88,7 +85,7 @@ function ActivityRow({ item, onPress }: { item: ActivityFeedItem; onPress: () =>
           <FaviconBadge url={item.url} size={16} />
           <View style={styles.linkBody}>
             <Text style={styles.linkTitle} numberOfLines={1}>
-              {meta?.title || domain}
+              {item.previewTitle || domain}
             </Text>
             <Text style={styles.linkDomain} numberOfLines={1}>
               {domain}

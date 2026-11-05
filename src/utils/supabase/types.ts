@@ -1,3 +1,4 @@
+// ⚠️ 수동 편집: posts.preview_* 16컬럼 + claim_post_preview/pick_preview_jobs 는 005_link_previews.sql 적용 후 `bun run update-types` 로 재생성될 때까지 손으로 넣은 것이다 (재생성 시 이 주석은 사라져도 된다)
 export type Json =
   | string
   | number
@@ -162,6 +163,22 @@ export type Database = {
           folder_id: number | null
           group_id: string | null
           id: number
+          preview_assisted_by: string | null
+          preview_attempts: number
+          preview_author: string | null
+          preview_canonical_url: string | null
+          preview_claimed_at: string | null
+          preview_description: string | null
+          preview_error: string | null
+          preview_fetched_at: string | null
+          preview_image_path: string | null
+          preview_image_src: string | null
+          preview_image_url: string | null
+          preview_provider: string | null
+          preview_site_name: string | null
+          preview_source: string | null
+          preview_status: string
+          preview_title: string | null
           url: string
           user_id: string | null
         }
@@ -171,6 +188,22 @@ export type Database = {
           folder_id?: number | null
           group_id?: string | null
           id?: never
+          preview_assisted_by?: string | null
+          preview_attempts?: number
+          preview_author?: string | null
+          preview_canonical_url?: string | null
+          preview_claimed_at?: string | null
+          preview_description?: string | null
+          preview_error?: string | null
+          preview_fetched_at?: string | null
+          preview_image_path?: string | null
+          preview_image_src?: string | null
+          preview_image_url?: string | null
+          preview_provider?: string | null
+          preview_site_name?: string | null
+          preview_source?: string | null
+          preview_status?: string
+          preview_title?: string | null
           url: string
           user_id?: string | null
         }
@@ -180,6 +213,22 @@ export type Database = {
           folder_id?: number | null
           group_id?: string | null
           id?: never
+          preview_assisted_by?: string | null
+          preview_attempts?: number
+          preview_author?: string | null
+          preview_canonical_url?: string | null
+          preview_claimed_at?: string | null
+          preview_description?: string | null
+          preview_error?: string | null
+          preview_fetched_at?: string | null
+          preview_image_path?: string | null
+          preview_image_src?: string | null
+          preview_image_url?: string | null
+          preview_provider?: string | null
+          preview_site_name?: string | null
+          preview_source?: string | null
+          preview_status?: string
+          preview_title?: string | null
           url?: string
           user_id?: string | null
         }
@@ -226,11 +275,24 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      claim_post_preview: {
+        Args: { p_force?: boolean; p_post_id: number }
+        Returns: {
+          attempts: number
+          folder_id: number
+          group_id: string
+          hint_title: string
+          id: number
+          prev_image_path: string
+          url: string
+        }[]
+      }
       is_group_member: {
         Args: { p_group: string; p_roles?: string[] }
         Returns: boolean
       }
       join_group_with_token: { Args: { p_token: string }; Returns: Json }
+      pick_preview_jobs: { Args: { p_limit?: number }; Returns: number[] }
       preview_invite: { Args: { p_token: string }; Returns: Json }
     }
     Enums: {

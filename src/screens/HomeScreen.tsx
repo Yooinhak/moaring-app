@@ -179,7 +179,7 @@ export default function HomeScreen() {
   const deferredDelete = useDeferredDeleteFolder(currentGroupId);
 
   // ── 공유 인텐트 → 저장 위치 선택 시트 (시안 09) ─────────────
-  const { pendingUrl, clearPendingUrl } = useShareIntent();
+  const { pendingUrl, pendingTitleHint, clearPendingUrl } = useShareIntent();
 
   // ── 폴더 CRUD 시트 상태 ────────────────────────────────────
   const [createVisible, setCreateVisible] = useState(false);
@@ -456,7 +456,12 @@ export default function HomeScreen() {
       <InviteAcceptSheet token={inviteToken} onClose={clearInviteToken} />
 
       {/* ── 공유 인텐트 → 저장 위치 선택 (시안 09) ── */}
-      <SaveLinkSheet visible={!!pendingUrl} onClose={clearPendingUrl} initialUrl={pendingUrl} />
+      <SaveLinkSheet
+        visible={!!pendingUrl}
+        onClose={clearPendingUrl}
+        initialUrl={pendingUrl}
+        titleHint={pendingTitleHint}
+      />
 
       {/* ── 폴더 생성 — 이름 입력은 상단 고정, 버튼은 하단 고정 (색상/이모지만 스크롤) ── */}
       <BottomSheet

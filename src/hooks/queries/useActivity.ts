@@ -55,6 +55,12 @@ export type ActivityFeedItem = {
   id: number;
   url: string;
   description: string | null;
+  /** 서버(Edge Function link-preview)가 수집한 미리보기 — 피드 행은 기기에서 메타를 긁지 않고 이 값만 그린다 */
+  previewTitle: string | null;
+  /** Storage 공개 URL(https). 지금은 피드에 안 그리지만 카드와 같은 컬럼을 들고 있어 썸네일을 붙일 때 쿼리 수정이 없다 */
+  previewImageUrl: string | null;
+  /** PREVIEW_STATUSES 중 하나. 005 미적용·구행이면 null 로 본다 */
+  previewStatus: string | null;
   createdAt: string | null;
   userId: string | null;
   displayName: string | null;
@@ -73,6 +79,9 @@ type FeedRow = {
   id: number;
   url: string;
   description: string | null;
+  preview_title: string | null;
+  preview_image_url: string | null;
+  preview_status: string | null;
   created_at: string | null;
   user_id: string | null;
   folder: {
@@ -97,8 +106,9 @@ export function useActivityFeedQuery(enabled = true) {
     queryFn: async (): Promise<ActivityFeedItem[]> => {
       const { data, error } = await supabase
         .from('posts')
+        // 명시 컬럼 목록이라 preview_* 는 직접 적어야 들어온다 (usePostsQuery 의 와일드카드와 다름)
         .select(
-          'id, url, description, created_at, user_id, folder:folders(id, name, color, emoji, group_id, group:groups(id, name, color, type))',
+          'id, url, description, preview_title, preview_image_url, preview_status, created_at, user_id, folder:folders(id, name, color, emoji, group_id, group:groups(id, name, color, type))',
         )
         .order('created_at', { ascending: false })
         .limit(50);
@@ -121,6 +131,9 @@ export function useActivityFeedQuery(enabled = true) {
         id: r.id,
         url: r.url,
         description: r.description,
+        previewTitle: r.preview_title,
+        previewImageUrl: r.preview_image_url,
+        previewStatus: r.preview_status,
         createdAt: r.created_at,
         userId: r.user_id,
         displayName: r.user_id ? (profileMap.get(r.user_id)?.display_name ?? null) : null,

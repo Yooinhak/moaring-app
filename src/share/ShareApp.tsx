@@ -16,6 +16,7 @@ import { NativeToastProvider } from '../components/Toast';
 import { colors } from '../constants/theme';
 import { GroupProvider } from '../contexts/GroupContext';
 import { useAuth } from '../hooks/useAuth';
+import { extractTitleHint } from '../hooks/useShareIntent';
 import { queryClient } from '../utils/react-query/queryClient';
 import { isValidUrl } from '../utils/validateUrl';
 
@@ -75,6 +76,9 @@ export default function ShareApp({ sharedText }: ShareAppProps) {
 function ShareContent({ sharedText }: ShareAppProps) {
   const { session, loading } = useAuth();
   const url = useMemo(() => extractUrl(sharedText), [sharedText]);
+  // 링크를 뺀 나머지 텍스트("상품명 https://…" 의 상품명)를 preview_title 힌트로 넘긴다.
+  // 쿠팡·스마트스토어처럼 서버·폰 모두 못 읽는 사이트는 공유 텍스트의 상품명이 카드 제목이 될 유일한 경로다.
+  const titleHint = useMemo(() => extractTitleHint(sharedText, url), [sharedText, url]);
   const [visible, setVisible] = useState(true);
 
   const close = useCallback(() => {
@@ -110,7 +114,7 @@ function ShareContent({ sharedText }: ShareAppProps) {
     );
   }
 
-  return <SaveLinkSheet visible={visible} onClose={close} initialUrl={url} />;
+  return <SaveLinkSheet visible={visible} onClose={close} initialUrl={url} titleHint={titleHint} />;
 }
 
 const styles = StyleSheet.create({

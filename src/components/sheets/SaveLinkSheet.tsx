@@ -17,6 +17,7 @@ import { readClipboardUrl } from '../../utils/clipboard';
 import { getDomainInfo } from '../../utils/domainInfo';
 import { lightTap } from '../../utils/haptics';
 import { parseMetadata } from '../../utils/parseMetadata';
+import type { DeviceHints } from '../../utils/preview/types';
 import { queryKeys } from '../../utils/react-query/queryKeys';
 import { isValidUrl } from '../../utils/validateUrl';
 import BottomSheet from '../BottomSheet';
@@ -53,6 +54,10 @@ import { NewFolderNameRow, NewFolderOptions, useNewFolderDraft } from './NewFold
  * 새 폴더 (2026-10-23, B안 — docs/02-design/features/share-new-folder.design.md):
  *  - 헤더 「＋ 새 폴더」 → 같은 시트가 'create' 화면으로 바뀐다(‹/뒤로 버튼 = 선택 화면 복귀).
  *  - 「만들고 바로 저장」 = 폴더 생성 + 링크 저장을 한 번에. 공유 시트에서 앱을 열 필요가 없다.
+ *
+ * 미리보기 서버 수집 보조 (2026-11-04, link-preview):
+ *  - 저장 시 공유 텍스트의 제목 힌트(titleHint → posts.preview_title)와 저장 전 폰이 읽은 메타(deviceHints)를
+ *    함께 넘긴다. 둘 다 서버 결과가 비었을 때만 쓰이는 보조값이고, 카드는 DB 컬럼(posts.preview_*)만 그린다.
  */
 
 const RECENT_FOLDER_KEY = 'moaring.recentFolderId';
@@ -62,6 +67,11 @@ interface SaveLinkSheetProps {
   onClose: () => void;
   /** 공유 인텐트로 받은 URL (없으면 자동 채움/직접 입력 모드) */
   initialUrl?: string | null;
+  /**
+   * 공유 텍스트에서 링크를 뺀 나머지(extractTitleHint, ≤200자) → posts.preview_title.
+   * 쿠팡처럼 서버·폰 모두 페이지를 못 읽는 사이트에서는 이 값이 카드 제목이 될 유일한 경로다.
+   */
+  titleHint?: string | null;
 }
 
 type AnyFolder = {
@@ -81,7 +91,7 @@ function domainOf(url: string): string {
   }
 }
 
-export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: SaveLinkSheetProps) {
+export default function SaveLinkSheet({ visible, onClose, initialUrl = null, titleHint = null }: SaveLinkSheetProps) {
   const { showToast } = useToast();
   const { groups, currentGroupId } = useGroup();
   const createPost = useCreatePost();
@@ -173,11 +183,22 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: S
   };
 
   // 링크 메타데이터 프리뷰 (제목/파비콘). 유효한 URL 일 때만 조회.
+  // parseMetadata 는 실패를 null 로 삼키므로 retry 는 시간만 쓴다(공유 시트는 저장 직후 닫힌다).
+  // 같은 링크로 시트를 다시 열 때 또 긁지 않도록 10분간 신선하게 둔다.
   const { data: meta, isLoading: metaLoading } = useQuery({
     queryKey: [queryKeys.METADATA, trimmedUrl],
     queryFn: () => parseMetadata(trimmedUrl),
     enabled: isValidUrl(trimmedUrl),
+    retry: 0,
+    staleTime: 10 * 60 * 1000,
   });
+
+  // 저장 전 폰이 읽은 메타를 서버 수집의 힌트로 넘긴다 — 힌트는 서버 결과가 비었을 때만 쓰이고 이미지는 서버가
+  // 재다운로드한다. insert 컬럼이 아니라 mutate 파라미터다(005 ③ GRANT: 클라이언트가 쓸 수 있는 preview_* 는
+  // preview_title 뿐이라 insert 바디에 넣으면 42501). 아직 읽는 중이면 null — 가속 호출은 기다리지 않는다.
+  const deviceHints: DeviceHints | null = meta
+    ? { title: meta.title, description: meta.description, image_url: meta.image, author: meta.author }
+    : null;
 
   const selectedFolder = useMemo(() => {
     if (!selectedId || !allFolders) return null;
@@ -193,7 +214,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: S
       return;
     }
     createPost.mutate(
-      { url: trimmedUrl, description: null, folder_id: selectedId },
+      { url: trimmedUrl, description: null, folder_id: selectedId, preview_title: titleHint, deviceHints },
       {
         onSuccess: () => {
           AsyncStorage.setItem(RECENT_FOLDER_KEY, String(selectedId)).catch(() => {});
@@ -270,7 +291,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null }: S
     }
 
     createFolderWithPost.mutate(
-      { groupId, name, color: draft.color, emoji: draft.emoji, url: trimmedUrl },
+      { groupId, name, color: draft.color, emoji: draft.emoji, url: trimmedUrl, preview_title: titleHint, deviceHints },
       {
         onSuccess: ({ folderId }) => {
           AsyncStorage.setItem(RECENT_FOLDER_KEY, String(folderId)).catch(() => {});

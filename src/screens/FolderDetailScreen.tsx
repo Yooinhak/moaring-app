@@ -41,11 +41,13 @@ import LinkPreviewCard, {
 import { useToast } from '../components/Toast';
 import { colors, glass, shadows } from '../constants/theme';
 import { useGroup } from '../contexts/GroupContext';
-import { useCreatePost, useGroupMembersQuery, usePostsQuery, useUpdatePost } from '../hooks/queries';
+import { useCreatePost, useGroupMembersQuery, usePostsQuery, useRefreshPreview, useUpdatePost } from '../hooks/queries';
 import { useAuth } from '../hooks/useAuth';
 import { useCurrentMood } from '../hooks/useCurrentMood';
+import { usePreviewCatchUp } from '../hooks/usePreviewCatchUp';
 import { MainStackParamList } from '../navigation/types';
 import { mediumTap } from '../utils/haptics';
+import { canRetryPreview, normalizeForCompare } from '../utils/preview/types';
 import { isValidUrl } from '../utils/validateUrl';
 
 // Android LayoutAnimation 활성화
@@ -56,6 +58,8 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 type FolderDetailRouteProp = RouteProp<MainStackParamList, 'FolderDetail'>;
 type Nav = NativeStackNavigationProp<MainStackParamList, 'FolderDetail'>;
 type SortOrder = 'newest' | 'oldest';
+// 메모 수정 시트가 든 행. url·preview_status 는 시트 하단 '미리보기 다시 불러오기' 가 쓴다 (failed 일 때만 노출)
+type EditTarget = { id: number; description: string; url: string; preview_status: string | null };
 
 // 보기 모드·정렬 순서는 사용자 선호로 기억한다 (방문마다 리셋되지 않도록).
 const VIEW_MODE_KEY = 'moaring.folderViewMode';
@@ -84,20 +88,31 @@ export default function FolderDetailScreen() {
 
   // 링크 수정 상태
   const [editVisible, setEditVisible] = useState(false);
-  const [editTarget, setEditTarget] = useState<{ id: number; description: string } | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
 
   const { data: postList, isLoading, refetch, isRefetching } = usePostsQuery(folderId);
+  // 아래 handleEditPress·handleRetryPreview 가 postList 를 deps 로 잡으면 pending 행이 있는 동안 3 s 폴링마다
+  // renderItem 이 새로 만들어져 보이는 카드 전부의 React.memo 가 깨진다. 콜백은 눌렀을 때만 행을 찾으니
+  // 최신 목록을 ref 로 읽어 identity 를 고정한다 (렌더마다 갱신)
+  const postListRef = useRef(postList);
+  postListRef.current = postList;
   const createPost = useCreatePost();
   const updatePost = useUpdatePost(folderId);
+  // mutate 만 꺼내는 이유: useMutation 결과 객체는 렌더마다 새로 만들어지지만 mutate 참조는 고정이라
+  // 아래 handleRetryPreview 의 useCallback 이 (그리고 카드의 React.memo 가) 깨지지 않는다
+  const { mutate: refreshPreview } = useRefreshPreview(folderId);
 
   const filteredList = useMemo(() => {
     let list = postList ?? [];
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
+      // 서버가 수집한 제목도 검색 대상 — 사용자는 URL 이 아니라 "그 영상 제목" 으로 기억한다
       list = list.filter(
         (item) =>
-          item.url.toLowerCase().includes(q) || (item.description && item.description.toLowerCase().includes(q)),
+          item.url.toLowerCase().includes(q) ||
+          (item.description && item.description.toLowerCase().includes(q)) ||
+          item.preview_title?.toLowerCase().includes(q),
       );
     }
 
@@ -119,7 +134,9 @@ export default function FolderDetailScreen() {
       return;
     }
 
-    const isDuplicate = postList?.some((item) => item.url === url);
+    // 추적 파라미터(utm_*, igsh, si …)·호스트 대소문자·끝 슬래시만 다른 링크는 같은 글이다. posts.url 자체는 원문 보존
+    const target = normalizeForCompare(url);
+    const isDuplicate = postList?.some((item) => normalizeForCompare(item.url) === target);
     if (isDuplicate) {
       showToast('error', '이미 저장된 링크예요');
       return;
@@ -188,14 +205,37 @@ export default function FolderDetailScreen() {
     });
   }, []);
 
-  const handleEditPress = useCallback((id: number, description: string | null) => {
-    setEditTarget({ id, description: description ?? '' });
-    setEditVisible(true);
-  }, []);
+  const handleEditPress = useCallback(
+    (id: number, description: string | null) => {
+      // 카드는 id·메모만 넘기므로 시트의 '미리보기 다시 불러오기' 에 필요한 url·상태는 행에서 꺼낸다
+      const row = postListRef.current?.find((p) => p.id === id);
+      setEditTarget({
+        id,
+        description: description ?? '',
+        url: row?.url ?? '',
+        preview_status: row?.preview_status ?? null,
+      });
+      setEditVisible(true);
+    },
+    [],
+  );
+
+  // '미리보기 다시 불러오기' — 메모 수정 시트(주 진입점)와 failed 카드 안의 링크(보조 진입점)가 같이 쓴다.
+  // 폰이 먼저 파싱해 힌트를 만들고 서버에 force 재수집을 보낸다 (쿨다운·토스트는 훅 안).
+  const handleRetryPreview = useCallback(
+    (id: number) => {
+      const row = postListRef.current?.find((p) => p.id === id);
+      if (row) refreshPreview({ postId: id, url: row.url });
+    },
+    [refreshPreview],
+  );
 
   // ── 그룹 권한 + 멤버 정보 (권한 규칙 / 추가한 사람) ──
   const { myRole, isPersonal, currentGroupId, currentGroup } = useGroup();
   const canEdit = myRole !== 'viewer';
+  // 미리보기 백필·재시도의 유일한 경로: pending·일시 failed·stale fetching 행을 서버에 다시 맡기고,
+  // canEdit 이면 서버가 차단당한(needs_client) 행을 폰 IP 로 한 번 보조한다. 토스트·에러 화면 없음
+  usePreviewCatchUp(folderId, postList, canEdit);
   const { session } = useAuth();
   const myUserId = session?.user?.id ?? null;
   const { data: members = [] } = useGroupMembersQuery(!isPersonal ? currentGroupId : null);
@@ -214,7 +254,20 @@ export default function FolderDetailScreen() {
     ({
       item,
     }: {
-      item: { id: number; url: string; description: string | null; user_id: string | null; created_at: string | null };
+      item: {
+        id: number;
+        url: string;
+        description: string | null;
+        user_id: string | null;
+        created_at: string | null;
+        preview_title: string | null;
+        preview_description: string | null;
+        preview_author: string | null;
+        preview_site_name: string | null;
+        preview_image_url: string | null;
+        preview_status: string | null;
+        preview_claimed_at: string | null;
+      };
     }) => {
       const member = !isPersonal && item.user_id ? memberMap.get(item.user_id) : undefined;
       return (
@@ -232,10 +285,28 @@ export default function FolderDetailScreen() {
           addedByAvatar={member?.avatarUrl ?? null}
           addedByIsMine={item.user_id === myUserId}
           createdAt={item.created_at}
+          previewTitle={item.preview_title}
+          previewDescription={item.preview_description}
+          previewAuthor={item.preview_author}
+          previewSiteName={item.preview_site_name}
+          previewImageUrl={item.preview_image_url}
+          previewStatus={item.preview_status}
+          previewClaimedAt={item.preview_claimed_at}
+          onRetryPreview={canEdit ? handleRetryPreview : undefined}
         />
       );
     },
-    [folderId, viewMode, handleEditPress, handleSwipeStart, canEdit, isPersonal, memberMap, myUserId],
+    [
+      folderId,
+      viewMode,
+      handleEditPress,
+      handleRetryPreview,
+      handleSwipeStart,
+      canEdit,
+      isPersonal,
+      memberMap,
+      myUserId,
+    ],
   );
 
   const keyExtractor = useCallback((item: { id: number }) => String(item.id), []);
@@ -476,6 +547,20 @@ export default function FolderDetailScreen() {
             저장
           </Button>
         </View>
+        {/* 수동 재수집 — 일시 실패(failed) 만. unsupported(삭제·비공개) 는 다시 눌러도 같으니 숨긴다 */}
+        {canEdit && canRetryPreview(editTarget?.preview_status) && (
+          <Button
+            variant="secondary"
+            size="small"
+            style={styles.sheetRetryBtn}
+            onPress={() => {
+              if (editTarget) handleRetryPreview(editTarget.id);
+              setEditVisible(false);
+            }}
+          >
+            미리보기 다시 불러오기
+          </Button>
+        )}
       </BottomSheet>
     </View>
   );
@@ -603,6 +688,8 @@ const styles = StyleSheet.create({
   list: { paddingHorizontal: 20, paddingTop: 14 },
   form: { gap: 16 },
   sheetBtns: { flexDirection: 'row', gap: 10, marginTop: 26, marginBottom: 8 },
+  // 취소/저장 행 아래 보조 동작 — 행 사이 간격을 가로 gap(10)과 맞춘다
+  sheetRetryBtn: { marginTop: 2, marginBottom: 8 },
   fab: {
     position: 'absolute',
     right: 20,

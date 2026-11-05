@@ -11,7 +11,7 @@ import { queryKeys } from './queryKeys';
  * throw 해도 화면에는 그냥 빈 목록으로 보인다(2026-07-23 감사에서 확인된 문제).
  *
  * 제외 대상:
- *  - METADATA: 외부 microlink API 라 실패가 흔하고, 실패해도 카드는 도메인만으로 그려진다.
+ *  - METADATA: 저장 전 기기 메타 fetch 라 실패가 흔하고, 실패해도 저장·카드(DB 컬럼)에는 영향이 없다.
  *  - retry 진행 중인 실패는 여기 오지 않는다 — 최종 실패만 알린다.
  */
 const NOISY_KEYS: readonly string[] = [queryKeys.METADATA];

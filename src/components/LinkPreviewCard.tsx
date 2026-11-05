@@ -2,7 +2,6 @@ import React, { forwardRef, useCallback, useImperativeHandle, useMemo, useRef, u
 
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { useQuery } from '@tanstack/react-query';
 import { Image } from 'expo-image';
 import ReanimatedSwipeable, { type SwipeableMethods } from 'react-native-gesture-handler/ReanimatedSwipeable';
 import Reanimated, {
@@ -20,8 +19,7 @@ import { useDeferredDeletePost } from '../hooks/queries';
 import { getDomainInfo } from '../utils/domainInfo';
 import { mediumTap, selectionTap, warningTap } from '../utils/haptics';
 import { openLink } from '../utils/openLink';
-import { parseMetadata } from '../utils/parseMetadata';
-import { queryKeys } from '../utils/react-query/queryKeys';
+import { canRetryPreview, isPreviewLoading } from '../utils/preview/types';
 import { relativeTime } from '../utils/relativeTime';
 
 import { Avatar } from './AvatarStack';
@@ -52,6 +50,19 @@ interface LinkPreviewCardProps {
   addedByAvatar?: string | null;
   addedByIsMine?: boolean;
   createdAt?: string | null;
+  /** 서버(Edge Function link-preview)가 수집해 posts.preview_* 에 보관한 값 — 카드는 네트워크 호출 없이
+   *  이 컬럼만 그린다. memo 최적화를 위해 객체가 아닌 원시값으로 받는다. */
+  previewTitle?: string | null;
+  previewDescription?: string | null;
+  previewAuthor?: string | null;
+  previewSiteName?: string | null;
+  /** Storage 공개 URL(https). http 는 Android cleartext 차단으로 조용히 깨지므로 https 외엔 그리지 않는다 */
+  previewImageUrl?: string | null;
+  /** PREVIEW_STATUSES 중 하나 (DB CHECK). undefined = 005 미적용 → 도메인 카드 */
+  previewStatus?: string | null;
+  previewClaimedAt?: string | null;
+  /** '미리보기 다시 불러오기' — failed 상태에서만 노출. 부모가 useCallback 으로 고정해 넘겨야 memo 가 유지된다 */
+  onRetryPreview?: (id: number) => void;
 }
 
 const RIGHT_ACTION_WIDTH = 80;
@@ -145,10 +156,20 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
     addedByAvatar = null,
     addedByIsMine = false,
     createdAt = null,
+    previewTitle = null,
+    previewDescription = null,
+    previewAuthor = null,
+    previewSiteName = null,
+    previewImageUrl = null,
+    previewStatus = null,
+    previewClaimedAt = null,
+    onRetryPreview,
   },
   ref,
 ) {
-  const [imageFailed, setImageFailed] = useState(false);
+  // 실패한 썸네일 URL 을 기억한다. boolean 이 아닌 이유: '다시 불러오기' 로 썸네일 URL 이 바뀌면
+  // 새 URL 은 다시 시도해야 하는데, 한 번 true 가 된 플래그는 되돌릴 곳이 없다(effect 로 setState 하면 lint 경고).
+  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const deferredDelete = useDeferredDeletePost(folderId);
   const swipeableRef = useRef<SwipeableMethods>(null);
 
@@ -156,11 +177,10 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
 
   useImperativeHandle(ref, () => handle, [handle]);
 
-  const { data: metadata, isLoading } = useQuery({
-    queryKey: [queryKeys.METADATA, url],
-    queryFn: () => parseMetadata(url),
-    enabled: !!url,
-  });
+  // 스켈레톤은 로딩 창(pending 10분·fetching 2분) 안에서만. 창 밖의 pending / needs_client / failed /
+  // unsupported 는 전부 도메인 카드 — 함수 미배포·차단 등으로 막힌 행이 영원히 깜빡이면 안 된다.
+  // 에러 화면·에러 토스트는 두지 않는다(링크 저장 자체는 성공했으므로).
+  const loading = isPreviewLoading(previewStatus, createdAt, previewClaimedAt);
 
   // 스와이프로 노출된 삭제 버튼을 탭하면 즉시 삭제한다. 확인창 대신 6초 실행취소
   // 토스트(useDeferredDeletePost)가 안전장치 역할을 한다 — 마찰을 줄인 삭제 흐름(2026-07-16).
@@ -190,6 +210,10 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
     onSwipeStart?.(handle);
   }, [onSwipeStart, handle]);
 
+  const handleRetryPreview = useCallback(() => {
+    onRetryPreview?.(id);
+  }, [onRetryPreview, id]);
+
   const domain = (() => {
     try {
       return new URL(url).hostname.replace('www.', '');
@@ -198,8 +222,16 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
     }
   })();
 
-  // 표시용 서비스명 — 알려진 서비스는 브랜드명(YouTube, 티스토리 등), 그 외엔 도메인
-  const domainLabel = getDomainInfo(url)?.label ?? domain;
+  // 표시용 서비스명 — 서버가 판정한 브랜드('네이버 지도', '쿠팡' …)가 있으면 그것, 없으면 domainInfo 라벨, 그 외엔 도메인
+  const domainLabel = previewSiteName || (getDomainInfo(url)?.label ?? domain);
+  const title = previewTitle || domain;
+  // 큰 카드 부제 — 설명이 없으면 채널명·@계정 같은 작성자로 대신한다
+  const subtitle = previewDescription || previewAuthor;
+  // https 가 아닌 썸네일은 그리지 않는다(DB CHECK 와 이중 방어). 실패한 URL 과 같으면 이니셜 타일
+  const imageUri = previewImageUrl && previewImageUrl.startsWith('https://') ? previewImageUrl : null;
+  const imageFailed = imageUri !== null && failedImageUrl === imageUri;
+  // unsupported(삭제·비공개) 에는 버튼을 내지 않는다 — 다시 눌러도 실패 토스트만 반복된다
+  const showRetry = canRetryPreview(previewStatus) && !!onRetryPreview;
 
   const cardContent =
     viewMode === 'compact' ? (
@@ -210,20 +242,20 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
         delayLongPress={280}
         activeOpacity={0.6}
         accessibilityRole="link"
-        accessibilityLabel={`${metadata?.title || domain} 링크 열기`}
+        accessibilityLabel={`${title} 링크 열기`}
         accessibilityHint={canEdit ? '길게 눌러 메모 수정' : undefined}
       >
         {/* Compact Thumbnail */}
-        {isLoading ? (
+        {loading ? (
           <Skeleton width={40} height={40} borderRadius={11} />
-        ) : metadata?.image && !imageFailed ? (
+        ) : imageUri && !imageFailed ? (
           <Image
-            source={{ uri: metadata.image }}
+            source={{ uri: imageUri }}
             style={compactStyles.thumbnail}
             contentFit="cover"
             cachePolicy="memory-disk"
             transition={200}
-            onError={() => setImageFailed(true)}
+            onError={() => setFailedImageUrl(imageUri)}
           />
         ) : (
           <View style={compactStyles.thumbnailFallback}>
@@ -233,7 +265,7 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
 
         {/* Compact Content */}
         <View style={compactStyles.body}>
-          {isLoading ? (
+          {loading ? (
             <View style={{ gap: 6 }}>
               <Skeleton width="70%" height={15} />
               <Skeleton width="50%" height={12} />
@@ -241,7 +273,7 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
           ) : (
             <>
               <Text style={compactStyles.title} numberOfLines={1}>
-                {metadata?.title || domain}
+                {title}
               </Text>
               <View style={compactStyles.domainRow}>
                 <FaviconBadge url={url} size={13} />
@@ -254,6 +286,12 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
                     member={{ userId: addedByUserId, displayName: addedByName, avatarUrl: addedByAvatar }}
                     size={14}
                   />
+                )}
+                {/* failed 재시도 — 도메인 행 끝에 작게. 카드 onPress(링크 열기)와 분리된 터치 대상 */}
+                {showRetry && (
+                  <TouchableOpacity accessibilityRole="button" hitSlop={8} onPress={handleRetryPreview}>
+                    <Text style={compactStyles.retryText}>미리보기 다시 불러오기</Text>
+                  </TouchableOpacity>
                 )}
               </View>
               {userDescription && (
@@ -274,22 +312,22 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
         delayLongPress={280}
         activeOpacity={0.6}
         accessibilityRole="link"
-        accessibilityLabel={`${metadata?.title || domain} 링크 열기`}
+        accessibilityLabel={`${title} 링크 열기`}
         accessibilityHint={canEdit ? '길게 눌러 메모 수정' : undefined}
       >
         {/* Thumbnail + 도메인 배지 오버레이 (시안 07: INSTAGRAM 스타일) */}
-        {isLoading ? (
+        {loading ? (
           <Skeleton width="100%" height={110} borderRadius={12} />
         ) : (
           <View>
-            {metadata?.image && !imageFailed ? (
+            {imageUri && !imageFailed ? (
               <Image
-                source={{ uri: metadata.image }}
+                source={{ uri: imageUri }}
                 style={styles.thumbnail}
                 contentFit="cover"
                 cachePolicy="memory-disk"
                 transition={200}
-                onError={() => setImageFailed(true)}
+                onError={() => setFailedImageUrl(imageUri)}
               />
             ) : (
               // 메타 이미지가 없으면 틴트 배경 + 흰 이니셜 타일
@@ -310,7 +348,7 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
 
         {/* Content */}
         <View style={styles.body}>
-          {isLoading ? (
+          {loading ? (
             <View style={{ gap: 8 }}>
               <Skeleton width="70%" height={16} />
               <Skeleton width="100%" height={14} />
@@ -318,11 +356,22 @@ const LinkPreviewCard = forwardRef<LinkPreviewCardHandle, LinkPreviewCardProps>(
           ) : (
             <>
               <Text style={styles.title} numberOfLines={2}>
-                {metadata?.title || domain}
+                {title}
               </Text>
-              {!!metadata?.description && (
+              {/* failed 재시도 — 제목 아래. alignSelf 로 폭을 글자만큼만 잡아 나머지 영역은 카드 onPress 가 받는다 */}
+              {showRetry && (
+                <TouchableOpacity
+                  style={styles.retry}
+                  accessibilityRole="button"
+                  hitSlop={8}
+                  onPress={handleRetryPreview}
+                >
+                  <Text style={styles.retryText}>미리보기 다시 불러오기</Text>
+                </TouchableOpacity>
+              )}
+              {!!subtitle && (
                 <Text style={styles.description} numberOfLines={2}>
-                  {metadata.description}
+                  {subtitle}
                 </Text>
               )}
             </>
@@ -453,6 +502,11 @@ const compactStyles = StyleSheet.create({
     fontFamily: 'LINESeedKR',
     color: colors.textFaint,
   },
+  retryText: {
+    fontSize: 11,
+    fontFamily: 'LINESeedKR',
+    color: colors.textFaint,
+  },
   memo: {
     fontSize: 12,
     color: colors.primary,
@@ -542,6 +596,14 @@ const styles = StyleSheet.create({
     fontFamily: 'LINESeedKR',
     color: colors.textFaint,
     lineHeight: 18,
+  },
+  retry: {
+    alignSelf: 'flex-start',
+  },
+  retryText: {
+    fontSize: 12,
+    fontFamily: 'LINESeedKR',
+    color: colors.textFaint,
   },
   domainRow: {
     flexDirection: 'row',

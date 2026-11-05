@@ -3,6 +3,8 @@ import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useToast } from '../../components/Toast';
+import { requestPreviewFetch } from '../../utils/preview/invoke';
+import type { DeviceHints } from '../../utils/preview/types';
 import { queryKeys } from '../../utils/react-query/queryKeys';
 import { supabase } from '../../utils/supabase/client';
 
@@ -93,7 +95,17 @@ export function useCreateFolderWithPost() {
 
   return useMutation({
     retry: 0,
-    mutationFn: async (params: { groupId: string; name: string; color: string; emoji: string | null; url: string }) => {
+    mutationFn: async (params: {
+      groupId: string;
+      name: string;
+      color: string;
+      emoji: string | null;
+      url: string;
+      /** 공유 텍스트에서 뽑은 제목 힌트 — 005 ③ 컬럼 GRANT 가 클라이언트 insert 를 허용하는 유일한 preview_* 컬럼 */
+      preview_title?: string | null;
+      /** 저장 전 parseMetadata 결과. insert 컬럼이 아니다(42501) — invoke 바디로만 보낸다 */
+      deviceHints?: DeviceHints | null;
+    }) => {
       const { data: folder, error } = await supabase
         .from('folders')
         .insert({ group_id: params.groupId, name: params.name, color: params.color, emoji: params.emoji })
@@ -101,11 +113,33 @@ export function useCreateFolderWithPost() {
         .single();
       if (error) throw error;
 
-      // posts.group_id 는 DB 트리거가 폴더 기준으로 채운다 — useCreatePost 와 같은 payload
-      const { error: postError } = await supabase
+      // posts.group_id 는 DB 트리거가 폴더 기준으로 채운다 — useCreatePost 와 같은 payload.
+      // preview_title 키는 힌트가 있을 때만 — null 이라도 키가 실리면 005 미적용 DB 에서 PostgREST 가
+      // 컬럼 없음(PGRST204) 으로 insert 를 거절해 힌트 없는 저장까지 막힌다
+      // RETURNING 이 RLS 로 막히면 42501 → 라이브 검증 후 .select 제거 가능(트리거·catch-up 만으로도 동작한다)
+      const { data: post, error: postError } = await supabase
         .from('posts')
-        .insert({ url: params.url, description: null, folder_id: folder.id });
+        .insert({
+          url: params.url,
+          description: null,
+          folder_id: folder.id,
+          ...(params.preview_title ? { preview_title: params.preview_title } : {}),
+        })
+        .select('id')
+        .single();
       if (postError) throw new FolderCreatedPostFailedError(folder.id);
+
+      if (post?.id) {
+        // DB 트리거가 활성이면 서버가 먼저 수집한다. 여기 호출은 가속용이라 await 하지 않는다 —
+        // 공유 시트는 280 ms 뒤 Activity 를 닫고 타이머가 멈춘다. 끝나면 새 폴더 목록과 활동 피드를 다시 받고,
+        // 함수 미배포·5xx 는 조용히 버린다(카드는 어차피 도메인 카드로 그려진다).
+        void requestPreviewFetch(post.id, params.deviceHints ?? null)
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: [queryKeys.POST_LIST, String(folder.id)] });
+            queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_ACTIVITY] });
+          })
+          .catch(() => {});
+      }
 
       return { folderId: folder.id };
     },

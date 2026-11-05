@@ -8,6 +8,7 @@
     "std/http/server": "https://deno.land/std@0.224.0/http/server.ts",
     "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2.45.4"
   },
+  "exclude": ["link-preview/__tests__"],
   "lint": {
     "rules": {
       "tags": ["recommended"]
