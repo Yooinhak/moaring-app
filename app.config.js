@@ -23,6 +23,8 @@ const withReleaseSigning = require('./plugins/withReleaseSigning');
 // Android 공유 수신을 MainActivity → ShareSheetActivity(투명, modules/share-sheet)로 옮긴다.
 // 앱 전환 없이 공유한 앱 위에 저장 시트만 뜨게 하는 핵심. expo-share-intent 뒤에 적용돼야 함.
 const withShareSheet = require('./plugins/withShareSheet');
+// Xcode 27 빌드 깨짐(fmt consteval, Pod deployment target < 15) 을 Podfile post_install 로 회피.
+const withXcode27Fixes = require('./plugins/withXcode27Fixes');
 
 module.exports = ({ config }) => {
   const enableShareIntent = ENABLE_BY_DEFAULT || process.env.SHARE_INTENT === '1';
@@ -43,5 +45,5 @@ module.exports = ({ config }) => {
     ];
   }
 
-  return withShareSheet(withReleaseSigning(config));
+  return withXcode27Fixes(withShareSheet(withReleaseSigning(config)));
 };
