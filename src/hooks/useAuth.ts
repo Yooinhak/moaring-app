@@ -5,6 +5,7 @@ import { Session, User } from '@supabase/supabase-js';
 
 import { normalizeAvatarUrl } from '../utils/avatarUrl';
 import { queryClient } from '../utils/react-query/queryClient';
+import { appStorage } from '../utils/storage/appStorage';
 import { supabase } from '../utils/supabase/client';
 
 /**
@@ -48,13 +49,16 @@ async function syncProfile(user: User) {
  */
 function clearAccountScopedData() {
   queryClient.clear();
-  AsyncStorage.multiRemove([
-    'moaring.currentGroupId', // GroupContext
-    'moaring.groupLastSeen', // useActivityUnread
-    'moaring.recentFolderId', // SaveLinkSheet
-  ]).catch(() => {
-    // 스토리지 정리 실패가 로그아웃을 막을 이유는 없다
-  });
+  // 공유 확장과 같이 쓰는 키 (iOS: App Group)
+  appStorage
+    .multiRemove([
+      'moaring.currentGroupId', // GroupContext
+      'moaring.recentFolderId', // SaveLinkSheet
+    ])
+    .catch(() => {
+      // 스토리지 정리 실패가 로그아웃을 막을 이유는 없다
+    });
+  AsyncStorage.multiRemove(['moaring.groupLastSeen' /* useActivityUnread */]).catch(() => {});
 }
 
 export function useAuth() {

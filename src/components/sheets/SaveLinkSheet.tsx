@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { Keyboard, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQuery } from '@tanstack/react-query';
 
 import { colors, getFolderColor, moods, resolveMoodKey, typo } from '../../constants/theme';
@@ -19,6 +18,7 @@ import { lightTap } from '../../utils/haptics';
 import { parseMetadata } from '../../utils/parseMetadata';
 import type { DeviceHints } from '../../utils/preview/types';
 import { queryKeys } from '../../utils/react-query/queryKeys';
+import { appStorage } from '../../utils/storage/appStorage';
 import { isValidUrl } from '../../utils/validateUrl';
 import BottomSheet from '../BottomSheet';
 import Button from '../Button';
@@ -116,7 +116,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null, tit
     setUrl(initialUrl ?? '');
     setEditingUrl(!initialUrl);
     /* eslint-enable react-hooks/set-state-in-effect */
-    AsyncStorage.getItem(RECENT_FOLDER_KEY).then((v) => setRecentFolderId(v ? Number(v) : null));
+    appStorage.getItem(RECENT_FOLDER_KEY).then((v) => setRecentFolderId(v ? Number(v) : null));
     if (!initialUrl) {
       // 클립보드에 링크가 있으면 타이핑 없이 자동 채움
       readClipboardUrl()
@@ -217,7 +217,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null, tit
       { url: trimmedUrl, description: null, folder_id: selectedId, preview_title: titleHint, deviceHints },
       {
         onSuccess: () => {
-          AsyncStorage.setItem(RECENT_FOLDER_KEY, String(selectedId)).catch(() => {});
+          appStorage.setItem(RECENT_FOLDER_KEY, String(selectedId)).catch(() => {});
           showToast('success', '링크를 저장했어요');
           onClose();
         },
@@ -294,7 +294,7 @@ export default function SaveLinkSheet({ visible, onClose, initialUrl = null, tit
       { groupId, name, color: draft.color, emoji: draft.emoji, url: trimmedUrl, preview_title: titleHint, deviceHints },
       {
         onSuccess: ({ folderId }) => {
-          AsyncStorage.setItem(RECENT_FOLDER_KEY, String(folderId)).catch(() => {});
+          appStorage.setItem(RECENT_FOLDER_KEY, String(folderId)).catch(() => {});
           if (draft.emoji) pushRecentEmoji(draft.emoji);
           showToast('success', `새 폴더 「${name}」에 저장했어요`);
           onClose();

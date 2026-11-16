@@ -1,15 +1,14 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-
 import { GroupSummary, useMyGroupsQuery } from '../hooks/queries/useGroups';
 import { useAuth } from '../hooks/useAuth';
+import { appStorage } from '../utils/storage/appStorage';
 
 /**
  * 현재 선택된 그룹 상태 (시안 ① GroupSwitcher 의 근간).
  *
  * - 그룹 목록은 React Query로 조회 (세션 있을 때만).
- * - 선택은 AsyncStorage에 영속 → 앱 재시작 시 마지막 그룹 유지.
+ * - 선택은 appStorage(iOS 는 공유 확장과 공유)에 영속 → 앱 재시작 시 마지막 그룹 유지.
  * - 선택된 그룹이 사라졌으면(나가기/삭제/강퇴) 개인 그룹으로 폴백.
  */
 
@@ -44,14 +43,15 @@ export function GroupProvider({ children }: { children: React.ReactNode }) {
 
   // 저장된 선택 복원
   useEffect(() => {
-    AsyncStorage.getItem(STORAGE_KEY)
+    appStorage
+      .getItem(STORAGE_KEY)
       .then((v) => setStoredId(v))
       .finally(() => setStorageLoaded(true));
   }, []);
 
   const selectGroup = useCallback((groupId: string) => {
     setStoredId(groupId);
-    AsyncStorage.setItem(STORAGE_KEY, groupId).catch(() => {});
+    appStorage.setItem(STORAGE_KEY, groupId).catch(() => {});
   }, []);
 
   // 유효성 검증: 저장된 그룹이 목록에 없으면 개인 그룹 폴백

@@ -46,6 +46,12 @@
       }
     ]
   },
+  "overrides": [
+    {
+      "files": ["**/__tests__/**"],
+      "env": { "jest": true }
+    }
+  ],
   "ignorePatterns": [
     "node_modules/",
     "ios/",
