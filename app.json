@@ -2,7 +2,7 @@
   "expo": {
     "name": "모아링",
     "slug": "moaring-app",
-    "version": "0.0.7",
+    "version": "0.0.8",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -28,7 +28,7 @@
       },
       "package": "dev.inak.moaring",
       "predictiveBackGestureEnabled": false,
-      "versionCode": 7
+      "versionCode": 8
     },
     "web": {
       "favicon": "./assets/favicon.png"
