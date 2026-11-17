@@ -17,7 +17,7 @@ description: 모아링 주간 개선 후보 스캔. 코드·UX·경쟁 앱을 �
 - `grep -rn "TODO\|FIXME" src modules supabase/functions`.
 - `bun install --frozen-lockfile` 가능하면 `bun run lint` 경고 수집 (실패하면 건너뛰고 문서에 "lint 미실행" 표기).
 - `git log --since="4 weeks ago" --oneline` 로 최근 변경 영역 — 막 만든 기능의 마감 손질 거리 찾기.
-- `research.md`, `docs/superpowers/HANDOFF-*.md` 의 "남은 일", "미해결" 류 항목.
+- (있으면) `research.md`, `docs/superpowers/HANDOFF-*.md` 의 "남은 일", "미해결" 류 항목.
 
 ## 3. 경쟁 앱·시장 (출처 = URL)
 - 웹 검색으로 링크 저장·북마크·공유 컬렉션 앱 3~5개 (예: Raindrop.io, Pocket 대체 앱, 국내 링크 모음 앱) 의 기능과 스토어 리뷰 불만 조사.
