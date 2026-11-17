@@ -10,7 +10,7 @@ description: 모아링 주간 개선 후보 스캔. 코드·UX·경쟁 앱을 �
 ## 1. 준비
 1. 작업 트리 확인: `git status --porcelain` 출력이 `supabase/.temp/` 외에 비어 있어야 한다. 아니면 멈추고 사용자에게 알린다.
 2. `git fetch origin && git switch develop && git pull --ff-only` (클라우드면 이미 develop 체크아웃 상태일 수 있음 — 그 경우 생략).
-3. 이전 스캔 미처리 확인: `gh pr list --base develop --state open --search "head:improve/"` 가 PR 을 돌려주거나, `origin/improve/*` 브랜치(`-dryrun` 등 접미사 붙은 것 제외) 중 `git merge-base --is-ancestor origin/improve/<날짜> origin/develop` 가 실패하는(develop 에 머지 안 된) 것이 있으면 아무것도 하지 않고 "이전 스캔 PR 미처리 — 먼저 고르거나 닫아 주세요" 보고 후 종료. `gh` 를 쓸 수 없으면 git 확인만 한다.
+3. 이전 스캔 미처리 확인: `gh` 가 동작하면 오직 열린 PR 로만 판정한다 — `gh pr list --base develop --state open --json headRefName --jq '.[].headRefName' | grep -E '^improve/'` 에 한 줄이라도 나오면 아무것도 하지 않고 "이전 스캔 PR 미처리 — 먼저 고르거나 닫아 주세요" 보고 후 종료. 스캔 PR 뿐 아니라 `-signals` PR 도 의도적으로 막는다 (신호 PR 의 BACKLOG 행도 ID 가 겹칠 수 있다). `gh` 를 쓸 수 없거나 인증이 안 된 경우에만 git 확인으로 대체한다: 접미사 유무와 관계없이 `origin/improve/*` 중 `git merge-base --is-ancestor <브랜치> origin/develop` 가 실패하는 것이 있으면 같은 보고 후 종료하고, 스쿼시 머지·닫힌 PR 의 남은 브랜치는 오탐 중단을 일으킬 수 있으니 오래된 `improve/*` 브랜치를 삭제하라고 보고에 덧붙인다.
 4. 날짜 `D=$(TZ=Asia/Seoul date +%F)`. 먼저 로컬 `git rev-parse --verify --quiet improve/$D` 와 원격 `git ls-remote --exit-code --heads origin improve/$D` 를 둘 다 확인. 하나라도 존재하면 아무것도 커밋·푸시하지 않고 종료, "이번 주 스캔 이미 있음" 보고. 둘 다 없으면 develop 에서 `git switch -c improve/$D`.
 5. `docs/improve/BACKLOG.md` 읽기. 모든 행의 제목·메모를 "제외 목록"으로 기억. 마지막 ID 번호 확인.
 

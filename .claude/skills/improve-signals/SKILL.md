@@ -14,7 +14,7 @@ description: (로컬 전용) Play Console 의 비정상 종료·ANR·리뷰와 S
 4. develop 의 최신 문서: `git ls-tree --name-only origin/develop docs/improve/ | grep -- '-candidates.md$' | sort | tail -1` (origin/develop 이 없으면 `develop`).
 5. 날짜가 더 최신인 쪽을 대상으로 한다. 날짜가 같거나 그 improve 브랜치가 이미 origin/develop 에 머지됐으면(`git merge-base --is-ancestor <branch> origin/develop`) develop 의 문서를 우선한다.
    - improve 브랜치 쪽이면 그 브랜치로 `git switch` (원격에만 있으면 `git switch -c <name> --track origin/<name>`). origin 에 대응 브랜치가 있으면 전환 후 `git pull --ff-only`. 커밋도 그 브랜치에 한다.
-   - develop 문서 쪽이면 `origin/develop`(없으면 로컬 develop)에서 `git switch -c improve/<문서날짜>-signals` 로 새 브랜치를 만들고 거기에 커밋한다. 이미 `improve/<문서날짜>-signals` 가 있으면 새로 만들지 말고 그 브랜치로 전환한다.
+   - develop 문서 쪽이면 `origin/develop`(없으면 로컬 develop)에서 `git switch -c improve/<문서날짜>-signals` 로 새 브랜치를 만들고 거기에 커밋한다. 이미 `improve/<문서날짜>-signals` 가 있으면 새로 만들지 말고 그 브랜치로 전환한다 (원격에만 있으면 위와 같이 `--track` 후 `pull --ff-only`).
 6. 둘 다 없으면 "후보 문서 없음 — /improve-scan 먼저" 보고 후 종료. develop·main 에 직접 커밋하지 않는다.
 
 ## 2. Play Console (claude-in-chrome)

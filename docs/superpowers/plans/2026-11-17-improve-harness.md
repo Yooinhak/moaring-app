@@ -671,9 +671,10 @@ gh pr create --base develop --head feature/improve-harness \
 
 - [ ] **점검 (Step 3 전)**
   - (a) 클라우드 루틴에서 `improve/*` 브랜치 푸시 허용(unrestricted branch pushes) 확인.
-  - (b) 수동 트리거에서 `command -v jq gh` 와 `gh auth status` 확인 — jq 없으면 루틴 설정 단계에서 설치(훅은 jq 없으면 모든 쓰기를 막음).
+  - (b) 수동 트리거에서 `command -v jq gh` 와 `gh auth status` 확인 — jq 없으면 루틴 설정 단계에서 설치(훅은 jq 없으면 모든 쓰기를 막음). 로컬도 `gh auth status` 확인 — 현재 로컬 gh 는 401 Bad credentials → `gh auth login` 필요.
   - (c) develop 의 0.0.8 버전 커밋(dccced6)을 먼저 푸시하거나 PR 본문에 포함 사실을 적기.
   - (d) 로컬 `improve/2026-11-17-dryrun` 브랜치 삭제(푸시 금지).
+  - (e) GitHub 저장소 설정 "Automatically delete head branches" 켜기, 오래된 `improve/*` 브랜치 정리.
 
 - [ ] **Step 3: 머지 후 스케줄 등록**
 
