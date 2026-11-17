@@ -3,7 +3,7 @@
 ## 기본
 - 응답은 한국어.
 - 패키지 매니저 bun. Expo 관련 패키지는 반드시 `npx expo install` (bun add 금지 — SDK 비호환 버전이 조용히 들어감).
-- 스택: Expo SDK 55, RN 0.83, Supabase(Auth·Postgres RLS·Edge Functions), React Query v5. 상세는 README.md, research.md.
+- 스택: Expo SDK 55, RN 0.83, Supabase(Auth·Postgres RLS·Edge Functions), React Query v5. 상세는 README.md, docs/superpowers/ (spec·plan·HANDOFF).
 
 ## 커밋·브랜치
 - 커밋 메시지: `feat. 한국어 설명` / `fix. …` / `chore. …` / `test. …`
@@ -44,7 +44,7 @@
 ## 개선 사이클
 1. 매주 월 09:00 KST 클라우드가 `/improve-scan` 실행 → `docs/improve/YYYY-MM-DD-candidates.md` + `docs/improve/BACKLOG.md` 갱신 → `develop` 대상 PR.
 2. (선택, 로컬) `/improve-signals` → Play Console·Sentry 신호를 같은 문서에 추가.
-3. 사용자가 후보 1개 선택 → BACKLOG 상태 `picked`. ← 게이트 ①
+3. 사용자가 후보 1개 선택 → BACKLOG 상태 `picked`. ← 게이트 ① (picked 표시는 scan PR 을 develop 에 머지한 뒤 develop 에서, 또는 그 PR 브랜치에서 — 다음 스캔 전에 scan PR 을 머지·닫아야 한다)
 4. `superpowers:brainstorming` → spec (`docs/superpowers/specs/`, **"검증" 섹션 필수**: 화면·조작·기대 결과).
 5. `superpowers:writing-plans` → plan (`docs/superpowers/plans/`).
 6. `superpowers:executing-plans` 또는 `subagent-driven-development` → `feature/<slug>` 에서 구현.

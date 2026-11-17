@@ -62,6 +62,9 @@ modules/*/android/.gradle/
 !docs/**/*.md
 !.github/**/*.md
 
+# Supabase CLI 로컬 임시 파일
+supabase/.temp/
+
 # bkit
 .bkit/
 .bkit-memory.json

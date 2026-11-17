@@ -669,6 +669,12 @@ gh pr create --base develop --head feature/improve-harness \
 ```
 본문의 검증 칸에 Task 2 테스트, Task 4·5 드라이런, Task 6 업로드 직전 확인 결과를 채운다.
 
+- [ ] **점검 (Step 3 전)**
+  - (a) 클라우드 루틴에서 `improve/*` 브랜치 푸시 허용(unrestricted branch pushes) 확인.
+  - (b) 수동 트리거에서 `command -v jq gh` 와 `gh auth status` 확인 — jq 없으면 루틴 설정 단계에서 설치(훅은 jq 없으면 모든 쓰기를 막음).
+  - (c) develop 의 0.0.8 버전 커밋(dccced6)을 먼저 푸시하거나 PR 본문에 포함 사실을 적기.
+  - (d) 로컬 `improve/2026-11-17-dryrun` 브랜치 삭제(푸시 금지).
+
 - [ ] **Step 3: 머지 후 스케줄 등록**
 
 스케줄은 develop 의 스킬을 읽으므로 PR 머지 후에 등록. `/schedule` 스킬로:
