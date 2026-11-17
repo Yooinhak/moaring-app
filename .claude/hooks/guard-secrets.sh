@@ -18,7 +18,7 @@ name=${path##*/}
 lower=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
 case "$lower" in
   .env.example) exit 0 ;;
-  .env|.env.*|*.keystore|*.jks|*.p8|*.p12)
+  .env|.env.*|*.keystore|*.jks|*.p8|*.p12|*.pem|*.key)
     block "비밀 파일($name)은 Claude 가 편집하지 않습니다. 필요하면 사용자가 직접 수정하세요." ;;
 esac
 exit 0

@@ -21,8 +21,13 @@
       "Read(**/*.jks)",
       "Read(**/*.p8)",
       "Read(**/*.p12)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
       "Bash(supabase db reset*)",
-      "Bash(git push --force*)"
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)"
     ]
   },
   "hooks": {

@@ -22,6 +22,9 @@ check "/repo/android/app/release.jks" 2
 check "/Users/me/keystores/moaring-upload.keystore" 2
 check "/repo/AuthKey_ABC.p8" 2
 check "/repo/cert.p12" 2
+check "/repo/server.pem" 2
+check "/repo/private.key" 2
+check "/repo/src/keyboard.tsx" 0
 check "/repo/.env.example" 0
 check "/repo/src/screens/HomeScreen.tsx" 0
 check "/repo/docs/environment.md" 0
