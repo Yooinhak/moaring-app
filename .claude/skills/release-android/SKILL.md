@@ -17,7 +17,7 @@ Play Console 업로드·게시는 **사용자가 문구·트랙·비율을 확�
 새 버전 V(인자 또는 patch+1), 새 versionCode N(현재+1):
 ```bash
 OLD_V=$(jq -r .expo.version app.json); OLD_N=$(jq -r .expo.android.versionCode app.json)
-sed -i '' "s/\"version\": \"$OLD_V\"/\"version\": \"$V\"/; s/\"versionCode\": $OLD_N/\"versionCode\": $N/" app.json
+sed -i '' "s/\"version\": \"$OLD_V\"/\"version\": \"$V\"/; s/\"versionCode\": $OLD_N$/\"versionCode\": $N/" app.json
 sed -i '' "s/\"version\": \"$OLD_V\"/\"version\": \"$V\"/" package.json
 sed -i '' "s/모아링 v[0-9.]*/모아링 v$V/" src/screens/ProfileScreen.tsx
 git diff --stat   # 3 files, app.json 은 정확히 2줄 변경
@@ -25,6 +25,7 @@ git add app.json package.json src/screens/ProfileScreen.tsx
 git commit -m "chore. $V 릴리스 — 버전·versionCode $N 반영"
 ```
 (이미 올려둔 상태면 이 단계 생략.)
+versionCode 는 현재+1 규칙. `scripts/release-android.sh`(APK·Drive 배포, MAJOR*10000+MINOR*100+PATCH 규칙)는 별개 흐름 — 0.1.0 이상에서 두 규칙이 갈라지니 그때 하나로 정리.
 주의: app.json 은 jq 로 다시 쓰지 않는다 (인라인 `"scheme": ["moaring"]` 이 펼쳐져 diff 가 커진다).
 
 ## 3. AAB 빌드
@@ -39,11 +40,11 @@ tail -5 <scratchpad>/aab.log
 ```bash
 AAB=android/app/build/outputs/bundle/release/app-release.aab
 grep -n "versionCode\|versionName" android/app/build.gradle | head -2     # N, "V"
-keytool -printcert -jarfile $AAB | grep "SHA256:"                         # 기대값 DE:60:5B:C0:F9:4E:34:79:3A:52:4F:C4:FA:33:ED:67:E2:5F:F1:BC:ED:3C:1B:0B:F8:84:F6:F5:D7:3F:08:AE (공개 인증서 지문). 다르면 중단하고 보고
+keytool -printcert -jarfile $AAB | grep "SHA256:"                         # 기대값 DE:60:5B:C0:F9:4E:34:79:3A:52:4F:C4:FA:33:ED:67:E2:5F:F1:BC:ED:3C:1B:0B:F8:84:F6:F5:D7:3F:08:AE (공개 인증서 지문; 업로드 키 교체 시 갱신). 다르면 중단하고 보고
 keytool -printcert -jarfile $AAB | grep -ci "android debug"               # 0 이어야 함
 ls -la "dist/모아링_$V.aab"
 ```
-debug 키면 중단하고 `docs/android-signing-guide.md` 안내.
+debug 키면 중단하고 `plugins/withReleaseSigning.js` 와 `~/.gradle/gradle.properties` 의 `MOARING_UPLOAD_*` 설정 확인 (값은 읽지 않음).
 
 ## 5. 출시 노트 초안
 - `git log <이전 태그 또는 이전 릴리스 커밋>..HEAD --oneline` 과 BACKLOG `done` 항목에서 사용자 체감 변화만 골라 3~5줄.

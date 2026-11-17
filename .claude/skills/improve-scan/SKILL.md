@@ -8,17 +8,19 @@ description: 모아링 주간 개선 후보 스캔. 코드·UX·경쟁 앱을 �
 앱 코드는 절대 수정하지 않는다. 빌드하지 않는다. 산출물은 문서 2개(후보 문서, BACKLOG)뿐이다.
 
 ## 1. 준비
-1. `git fetch origin && git switch develop && git pull --ff-only` (클라우드면 이미 develop 체크아웃 상태일 수 있음 — 그 경우 생략).
-2. 날짜 `D=$(TZ=Asia/Seoul date +%F)`. 먼저 로컬 `git rev-parse --verify --quiet improve/$D` 와 원격 `git ls-remote --exit-code --heads origin improve/$D` 를 둘 다 확인. 하나라도 존재하면 아무것도 커밋·푸시하지 않고 종료, "이번 주 스캔 이미 있음" 보고. 둘 다 없으면 develop 에서 `git switch -c improve/$D`.
-3. `docs/improve/BACKLOG.md` 읽기. 모든 행의 제목·메모를 "제외 목록"으로 기억. 마지막 ID 번호 확인.
+1. 작업 트리 확인: `git status --porcelain` 출력이 `supabase/.temp/` 외에 비어 있어야 한다. 아니면 멈추고 사용자에게 알린다.
+2. `git fetch origin && git switch develop && git pull --ff-only` (클라우드면 이미 develop 체크아웃 상태일 수 있음 — 그 경우 생략).
+3. 이전 스캔 미처리 확인: `gh pr list --base develop --state open --search "head:improve/"` 가 PR 을 돌려주거나, `origin/improve/*` 브랜치(`-dryrun` 등 접미사 붙은 것 제외) 중 `git merge-base --is-ancestor origin/improve/<날짜> origin/develop` 가 실패하는(develop 에 머지 안 된) 것이 있으면 아무것도 하지 않고 "이전 스캔 PR 미처리 — 먼저 고르거나 닫아 주세요" 보고 후 종료. `gh` 를 쓸 수 없으면 git 확인만 한다.
+4. 날짜 `D=$(TZ=Asia/Seoul date +%F)`. 먼저 로컬 `git rev-parse --verify --quiet improve/$D` 와 원격 `git ls-remote --exit-code --heads origin improve/$D` 를 둘 다 확인. 하나라도 존재하면 아무것도 커밋·푸시하지 않고 종료, "이번 주 스캔 이미 있음" 보고. 둘 다 없으면 develop 에서 `git switch -c improve/$D`.
+5. `docs/improve/BACKLOG.md` 읽기. 모든 행의 제목·메모를 "제외 목록"으로 기억. 마지막 ID 번호 확인.
 
 ## 2. 코드·UX 스캔 (출처 = 파일:줄)
 - 화면 흐름: `src/screens/*.tsx`, `src/components/sheets/*.tsx` 를 읽고 빈 상태, 로딩, 에러 처리, 되돌리기 불가 동작, 접근성(라벨·터치 영역) 빈틈 찾기.
 - `grep -rn "TODO\|FIXME" src modules supabase/functions`.
-- `bun install --frozen-lockfile` 후 `bun run lint` 경고 수집 (lint 는 .env 불필요). 설치나 lint 를 실행할 수 없으면 건너뛰고 문서 "스캔 범위"에 "lint 미실행" 표기.
+- `bun install --frozen-lockfile` 후 `bun run lint` 경고 수집 (lint 는 .env 불필요). lint 가 경고로 exit 1 해도 "lint 실행" 으로 치고 경고 수를 기록한다. 설치나 lint 를 아예 실행할 수 없을 때만 건너뛰고 문서 "스캔 범위"에 "lint 미실행" 표기.
 - 파일:줄 은 `grep -n` 결과나 실제로 읽은 줄 번호만 쓴다. 어림짐작 금지.
 - `git log --since="4 weeks ago" --oneline` 로 최근 변경 영역 — 막 만든 기능의 마감 손질 거리 찾기.
-- (있으면) `research.md`, `docs/superpowers/HANDOFF-*.md` 의 "남은 일", "미해결" 류 항목.
+- (있으면) `docs/superpowers/HANDOFF-*.md` 의 "남은 일", "미해결" 류 항목.
 
 ## 3. 경쟁 앱·시장 (출처 = URL)
 - 웹 검색으로 링크 저장·북마크·공유 컬렉션 앱 3~5개 (예: Raindrop.io, Pocket 대체 앱, 국내 링크 모음 앱) 의 기능과 스토어 리뷰 불만 조사. 앱마다 검색 스니펫만 보지 말고 최소 한 페이지는 직접 읽는다. 3곳 미만이면 실제 조사한 수를 "스캔 범위"에 적는다. 후보는 코드 출처만으로도 가능하다.
@@ -71,6 +73,7 @@ git commit -m "chore. $D 개선 후보 스캔"
 - 아니면 PR 본문을 저장소 밖 임시 파일 `${TMPDIR:-/tmp}/improve-$D-pr-body.md` 에 실제 줄바꿈으로 쓴다 (요약 표 그대로 + 빈 줄 + "고를 항목을 PR 코멘트로 남기거나 로컬에서 BACKLOG 상태를 picked 로 바꾸세요."). 그 뒤:
   `git push -u origin improve/$D`
   `gh pr create --base develop --title "chore. $D 개선 후보" --body-file "${TMPDIR:-/tmp}/improve-$D-pr-body.md"`
+- `git push` 나 `gh pr create` 가 실패하면 재시도하지 말고, 실패 내용과 브랜치명·비교 URL `https://github.com/Yooinhak/moaring-app/compare/develop...improve/$D` 를 보고한다.
 - PR 본문·커밋에 Co-Authored-By 넣지 않음.
 
 ## 8. 보고
