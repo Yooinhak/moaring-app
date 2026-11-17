@@ -9,7 +9,7 @@ Play Console 업로드·게시는 **사용자가 문구·트랙·비율을 확�
 
 ## 1. 사전 확인
 - 현재 브랜치 `develop`, 작업 트리 깨끗(`git status --porcelain` 비어 있음, `supabase/.temp/` 제외).
-- `bunx tsc --noEmit -p .` 와 `bun run lint` 통과.
+- `bunx tsc --noEmit -p .` 통과. `bun run lint` 는 `--max-warnings 0` 이라 경고 1개도 exit 1 — 새 경고가 아니면(알려진: Toast.tsx:60) 기록만 하고 진행, 새 경고·에러면 중단.
 - 현재 버전: `jq -r '.expo.version, .expo.android.versionCode' app.json`.
 - Play Console 에 이미 올라간 최고 versionCode 보다 커야 한다 (모르면 사용자에게 확인).
 
@@ -38,7 +38,7 @@ tail -5 <scratchpad>/aab.log
 ```bash
 AAB=android/app/build/outputs/bundle/release/app-release.aab
 grep -n "versionCode\|versionName" android/app/build.gradle | head -2     # N, "V"
-keytool -printcert -jarfile $AAB | grep SHA256                            # 업로드 키 지문
+keytool -printcert -jarfile $AAB | grep "SHA256:"                         # 업로드 키 지문
 keytool -printcert -jarfile $AAB | grep -ci "android debug"               # 0 이어야 함
 ls -la "dist/모아링_$V.aab"
 ```
