@@ -2,7 +2,7 @@
   "expo": {
     "name": "모아링",
     "slug": "moaring-app",
-    "version": "0.0.8",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",

@@ -237,7 +237,7 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.footerText}>모아링 v0.0.8</Text>
+        <Text style={styles.footerText}>모아링 v1.0.0</Text>
       </ScrollView>
 
       <AlertDialog
