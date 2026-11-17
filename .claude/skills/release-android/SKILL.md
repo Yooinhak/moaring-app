@@ -11,20 +11,21 @@ Play Console 업로드·게시는 **사용자가 문구·트랙·비율을 확�
 - 현재 브랜치 `develop`, 작업 트리 깨끗(`git status --porcelain` 비어 있음, `supabase/.temp/` 제외).
 - `bunx tsc --noEmit -p .` 통과. `bun run lint` 는 `--max-warnings 0` 이라 경고 1개도 exit 1 — 새 경고가 아니면(알려진: Toast.tsx:60) 기록만 하고 진행, 새 경고·에러면 중단.
 - 현재 버전: `jq -r '.expo.version, .expo.android.versionCode' app.json`.
-- Play Console 에 이미 올라간 최고 versionCode 보다 커야 한다 (모르면 사용자에게 확인).
+- Play Console 에 올라간 최고 versionCode 를 사용자에게 확인받는다 (기록: 0.0.7 = 7 Alpha 업로드; 0.0.8 = 8 미업로드 — 2026-11-17 기준).
 
 ## 2. 버전 올림
 새 버전 V(인자 또는 patch+1), 새 versionCode N(현재+1):
 ```bash
-jq --arg v "$V" --argjson n "$N" '.expo.version=$v | .expo.android.versionCode=$n' app.json > app.json.tmp && mv app.json.tmp app.json
-jq --arg v "$V" '.version=$v' package.json > package.json.tmp && mv package.json.tmp package.json
+OLD_V=$(jq -r .expo.version app.json); OLD_N=$(jq -r .expo.android.versionCode app.json)
+sed -i '' "s/\"version\": \"$OLD_V\"/\"version\": \"$V\"/; s/\"versionCode\": $OLD_N/\"versionCode\": $N/" app.json
+sed -i '' "s/\"version\": \"$OLD_V\"/\"version\": \"$V\"/" package.json
 sed -i '' "s/모아링 v[0-9.]*/모아링 v$V/" src/screens/ProfileScreen.tsx
-git diff --stat   # 3 files
+git diff --stat   # 3 files, app.json 은 정확히 2줄 변경
 git add app.json package.json src/screens/ProfileScreen.tsx
 git commit -m "chore. $V 릴리스 — 버전·versionCode $N 반영"
 ```
 (이미 올려둔 상태면 이 단계 생략.)
-주의: `jq` 가 app.json 들여쓰기를 2칸으로 다시 쓴다 — 기존과 같으면 diff 는 두 줄뿐이어야 한다. 더 바뀌면 되돌리고 sed 로 두 줄만 수정.
+주의: app.json 은 jq 로 다시 쓰지 않는다 (인라인 `"scheme": ["moaring"]` 이 펼쳐져 diff 가 커진다).
 
 ## 3. AAB 빌드
 로그는 scratchpad 에:
@@ -38,7 +39,7 @@ tail -5 <scratchpad>/aab.log
 ```bash
 AAB=android/app/build/outputs/bundle/release/app-release.aab
 grep -n "versionCode\|versionName" android/app/build.gradle | head -2     # N, "V"
-keytool -printcert -jarfile $AAB | grep "SHA256:"                         # 업로드 키 지문
+keytool -printcert -jarfile $AAB | grep "SHA256:"                         # 기대값 DE:60:5B:C0:F9:4E:34:79:3A:52:4F:C4:FA:33:ED:67:E2:5F:F1:BC:ED:3C:1B:0B:F8:84:F6:F5:D7:3F:08:AE (공개 인증서 지문). 다르면 중단하고 보고
 keytool -printcert -jarfile $AAB | grep -ci "android debug"               # 0 이어야 함
 ls -la "dist/모아링_$V.aab"
 ```
