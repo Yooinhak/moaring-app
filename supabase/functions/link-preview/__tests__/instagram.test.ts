@@ -371,6 +371,18 @@ describe('instagramAdapter.run', () => {
     expect(out.error).toBe('gone');
   });
 
+  // 2026-11-17 운영 관측(post 270·298): 데이터센터 IP 에는 게시물 대신 앱 셸을 주고 og:image 가 인스타 로고(rsrc.php) —
+  // 로고를 썸네일로 저장하면 안 된다(제목도 없는 ready 가 된다)
+  test('EmbedBrokenMedia + 페이지가 앱 셸(og:image = static.cdninstagram.com/rsrc.php 로고) → needs_client', async () => {
+    const shell =
+      `<!DOCTYPE html><html><head><title>Instagram</title>` +
+      `<meta property="og:image" content="https://static.cdninstagram.com/rsrc.php/yj/r/f01UdNyJjJj.webp" />` +
+      `</head><body></body></html>`;
+    const { io } = makeIo({ [EMBED_URL]: { text: EMBED_BROKEN }, [POST_URL]: { text: shell } });
+    const out = expectKind(await instagramAdapter.run(makeCtx(instagramAdapter, POST_URL, io)), 'needs_client');
+    expect(out.task).toEqual({ runner: 'fetch', parser: 'instagram_embed', url: POST_URL });
+  });
+
   test('EmbedBrokenMedia + 페이지 로그인 리다이렉트 → needs_client(폰은 임베드가 아니라 게시물 페이지를 읽는다)', async () => {
     const { io } = makeIo({
       [EMBED_URL]: { text: EMBED_BROKEN },
