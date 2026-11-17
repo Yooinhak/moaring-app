@@ -82,6 +82,7 @@ Expected: 전부 `IGNORED`.
 *.md
 !README.md
 !CLAUDE.md
+!.claude/**/*.md
 !docs/**/*.md
 !.github/**/*.md
 ```
