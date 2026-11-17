@@ -13,6 +13,7 @@
 ## 비밀
 - `.env*`, `*.keystore`, `*.jks`, `*.p8`, `*.p12`, `~/.gradle/gradle.properties` 의 `MOARING_UPLOAD_*` 는 읽지도 수정·커밋하지도 않는다 (훅이 편집을 막음).
 - `.claude/settings.json` 에 토큰·키를 넣지 않는다.
+- 한계: Bash 명령(cat, echo >, sed -i)은 훅·deny 로 완전히 막히지 않는다 — 비밀 파일 경로를 Bash 에 쓰지 않는다.
 
 ## 검증 명령
 - 타입: `bunx tsc --noEmit -p .`
