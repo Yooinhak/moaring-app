@@ -3,6 +3,8 @@ import { useCallback, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useToast } from '../../components/Toast';
+import { requestPreviewFetch } from '../../utils/preview/invoke';
+import { type DeviceHints, isPreviewLoading } from '../../utils/preview/types';
 import { queryKeys } from '../../utils/react-query/queryKeys';
 import { supabase } from '../../utils/supabase/client';
 
@@ -10,11 +12,27 @@ import { supabase } from '../../utils/supabase/client';
 export function usePostsQuery(folderId: string) {
   return useQuery({
     queryKey: [queryKeys.POST_LIST, folderId],
-    queryFn: async () =>
-      await supabase.from('posts').select().eq('folder_id', Number(folderId)),
-    select: (data) => data.data,
+    queryFn: async () => {
+      const { data, error } = await supabase.from('posts').select().eq('folder_id', Number(folderId));
+      // 에러를 던져야 retry·isError 가 동작한다 (useFolders 와 같은 계약).
+      // 던지지 않으면 실패가 'success + 빈 목록'으로 위장된다.
+      if (error) throw error;
+      return data ?? [];
+    },
+    // 서버가 미리보기를 수집 중인 행(pending/fetching)이 있으면 3초마다 목록을 다시 받아 카드를 채운다.
+    // Realtime 을 안 쓰는 이유: 앱 어디에도 channel 이 없고 posts 의 publication 여부도 불확실한데,
+    // 수집은 저장 직후 수 초면 끝나는 짧은 창이라 폴링이 더 단순하다.
+    // isPreviewLoading 은 pending 10분·fetching 2분 창을 두므로 함수 미배포·pg_net 실패로 막힌 행이
+    // 영구 폴링을 만들지 않는다 — 창이 지나면 false 로 떨어져 폴링이 멈추고 카드는 도메인 카드로 굳는다.
+    refetchInterval: (query) => {
+      const rows = query.state.data ?? [];
+      return rows.some((p) => isPreviewLoading(p.preview_status, p.created_at, p.preview_claimed_at)) ? 3000 : false;
+    },
   });
 }
+
+/** 목록 캐시에서 id 로 걸러낼 때만 쓰는 최소 구조 (any 회피용) */
+type RowWithId = { id: number };
 
 // --- Mutations ---
 export function useCreatePost() {
@@ -22,9 +40,34 @@ export function useCreatePost() {
   const { showToast } = useToast();
 
   return useMutation({
-    mutationFn: async (params: { url: string; description: string | null; folder_id: number }) => {
-      const { error } = await supabase.from('posts').insert(params);
+    mutationFn: async (params: {
+      url: string;
+      description: string | null;
+      folder_id: number;
+      /** 공유 텍스트에서 뽑은 제목 힌트 — 005 ③ 컬럼 GRANT 가 클라이언트 insert 를 허용하는 유일한 preview_* 컬럼 */
+      preview_title?: string | null;
+      /** 저장 전 parseMetadata 결과. insert 컬럼이 아니다(42501) — invoke 바디로만 보낸다 */
+      deviceHints?: DeviceHints | null;
+    }) => {
+      const { url, description, folder_id, preview_title, deviceHints } = params;
+      // preview_title 키는 힌트가 있을 때만 — null 이라도 키가 실리면 005 미적용 DB 에서 PostgREST 가
+      // 컬럼 없음(PGRST204) 으로 insert 자체를 거절해 힌트 없는 저장까지 막힌다
+      const row = { url, description, folder_id, ...(preview_title ? { preview_title } : {}) };
+      // RETURNING 이 RLS 로 막히면 42501 → 라이브 검증 후 .select 제거 가능(트리거·catch-up 만으로도 동작한다)
+      const { data, error } = await supabase.from('posts').insert(row).select('id').single();
       if (error) throw error;
+      if (data?.id) {
+        // DB 트리거가 활성이면 서버가 먼저 수집한다. 여기 호출은 가속용이라 await 하지 않는다 —
+        // 공유 시트는 280 ms 뒤 Activity 를 닫고 타이머가 멈춘다. 끝나면 목록과 활동 피드를 다시 받아
+        // 카드·피드 제목을 채우고, 함수 미배포·5xx 는 조용히 버린다(카드는 어차피 도메인 카드로 그려진다).
+        void requestPreviewFetch(data.id, deviceHints ?? null)
+          .then(() => {
+            queryClient.invalidateQueries({ queryKey: [queryKeys.POST_LIST, String(folder_id)] });
+            queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_ACTIVITY] });
+          })
+          .catch(() => {});
+      }
+      return data;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [queryKeys.POST_LIST, String(variables.folder_id)] });
@@ -71,10 +114,7 @@ export function useDeletePost(folderId: string) {
       const queryKey = [queryKeys.POST_LIST, folderId];
       await queryClient.cancelQueries({ queryKey });
       const previous = queryClient.getQueryData(queryKey);
-      queryClient.setQueryData(queryKey, (old: any) => {
-        if (!old?.data) return old;
-        return { ...old, data: old.data.filter((p: any) => p.id !== id) };
-      });
+      queryClient.setQueryData<RowWithId[]>(queryKey, (old) => old?.filter((p) => p.id !== id));
       return { previous };
     },
     onError: (_err, _id, context) => {
@@ -100,19 +140,19 @@ export function useDeletePost(folderId: string) {
 export function useDeferredDeletePost(folderId: string) {
   const queryClient = useQueryClient();
   const { showToast } = useToast();
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ⚠️ id 별 타이머 — 단일 ref 를 쓰면 6초 안에 두 개를 지울 때 첫 번째 타이머가 취소되어
+  //    그 항목이 DB 에서 영영 삭제되지 않고 invalidate 시점에 되살아난다(2026-07-23 감사).
+  const timersRef = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   const execute = useCallback((id: number) => {
     const queryKey = [queryKeys.POST_LIST, folderId];
 
     // 1. 낙관적으로 캐시에서 제거
     const previous = queryClient.getQueryData(queryKey);
-    queryClient.setQueryData(queryKey, (old: any) => {
-      if (!old?.data) return old;
-      return { ...old, data: old.data.filter((p: any) => p.id !== id) };
-    });
+    queryClient.setQueryData<RowWithId[]>(queryKey, (old) => old?.filter((p) => p.id !== id));
 
-    if (timerRef.current) clearTimeout(timerRef.current);
+    const running = timersRef.current.get(id);
+    if (running) clearTimeout(running);
 
     let undone = false;
 
@@ -123,7 +163,9 @@ export function useDeferredDeletePost(folderId: string) {
         label: '실행 취소',
         onPress: () => {
           undone = true;
-          if (timerRef.current) clearTimeout(timerRef.current);
+          const t = timersRef.current.get(id);
+          if (t) clearTimeout(t);
+          timersRef.current.delete(id);
           if (previous) {
             queryClient.setQueryData(queryKey, previous);
           }
@@ -133,7 +175,7 @@ export function useDeferredDeletePost(folderId: string) {
     });
 
     // 3. 6초 후 실제 삭제
-    timerRef.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       if (!undone) {
         supabase.from('posts').delete().eq('id', id).then(({ error }) => {
           if (error) {
@@ -146,8 +188,9 @@ export function useDeferredDeletePost(folderId: string) {
           queryClient.invalidateQueries({ queryKey: [queryKeys.FOLDER_LIST] });
         });
       }
-      timerRef.current = null;
+      timersRef.current.delete(id);
     }, 6000);
+    timersRef.current.set(id, timer);
   }, [queryClient, showToast, folderId]);
 
   return { execute };

@@ -26,7 +26,7 @@ import InviteSheet from '../components/sheets/InviteSheet';
 import SaveLinkSheet from '../components/sheets/SaveLinkSheet';
 import { useToast } from '../components/Toast';
 import { suggestIdentity } from '../constants/emojiData';
-import { colors, FolderColorKey, getFolderColor, glass, shadows, typo, warm } from '../constants/theme';
+import { colors, FolderColorKey, getFolderColor, glass, shadows, typo } from '../constants/theme';
 import { useGroup } from '../contexts/GroupContext';
 import {
   useCreateFolder,
@@ -36,6 +36,7 @@ import {
   useUpdateFolder,
 } from '../hooks/queries';
 import { useActivityUnread } from '../hooks/useActivityUnread';
+import { useCurrentMood } from '../hooks/useCurrentMood';
 import { useInviteDeepLink } from '../hooks/useInviteDeepLink';
 import { useReduceMotion } from '../hooks/useReduceMotion';
 import { useShareIntent } from '../hooks/useShareIntent';
@@ -133,6 +134,7 @@ const GRID_H_PADDING = 22;
 const GRID_GAP = 11;
 
 export default function HomeScreen() {
+  const mood = useCurrentMood();
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const { showToast } = useToast();
@@ -177,7 +179,7 @@ export default function HomeScreen() {
   const deferredDelete = useDeferredDeleteFolder(currentGroupId);
 
   // ── 공유 인텐트 → 저장 위치 선택 시트 (시안 09) ─────────────
-  const { pendingUrl, clearPendingUrl } = useShareIntent();
+  const { pendingUrl, pendingTitleHint, clearPendingUrl } = useShareIntent();
 
   // ── 폴더 CRUD 시트 상태 ────────────────────────────────────
   const [createVisible, setCreateVisible] = useState(false);
@@ -307,7 +309,8 @@ export default function HomeScreen() {
           <TouchableOpacity
             style={[
               styles.addTile,
-              { width: cardWidth, borderColor: isPersonal ? 'rgba(139,126,242,0.45)' : 'rgba(249,115,22,0.4)' },
+              // 대시 보더도 무드를 따른다 (66 = 40% 알파) — 안 그러면 민트/로즈 그룹에서 보더만 주황으로 남는다
+              { width: cardWidth, borderColor: `${mood?.accent ?? colors.primary}66` },
             ]}
             onPress={openCreateFolder}
             activeOpacity={0.65}
@@ -315,9 +318,9 @@ export default function HomeScreen() {
             accessibilityLabel="새 폴더 만들기"
           >
             <View style={styles.addTileCircle}>
-              <PlusIcon size={15} color={isPersonal ? colors.primary : warm.accent} strokeWidth={2.4} />
+              <PlusIcon size={15} color={mood?.accent ?? colors.primary} strokeWidth={2.4} />
             </View>
-            <Text style={[styles.addTileText, !isPersonal && { color: warm.text }]}>새 폴더</Text>
+            <Text style={[styles.addTileText, { color: mood?.metaText ?? colors.textMuted }]}>새 폴더</Text>
           </TouchableOpacity>
         );
       }
@@ -334,7 +337,7 @@ export default function HomeScreen() {
         />
       );
     },
-    [canEdit, isPersonal, cardWidth, openCreateFolder, handleOpenFolder, handleEditFolder, handleDeleteFolder],
+    [canEdit, isPersonal, mood, cardWidth, openCreateFolder, handleOpenFolder, handleEditFolder, handleDeleteFolder],
   );
 
   const keyExtractor = useCallback((item: GridItem) => (item.kind === 'add' ? 'add-tile' : String(item.folder.id)), []);
@@ -345,8 +348,8 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* 공기 배경 — 개인 = 블루, 공유 그룹 = 웜 */}
-      <GlassBackground variant={isPersonal ? 'personal' : 'group'} />
+      {/* 공기 배경 — 개인 = 라벤더, 공유 그룹 = 그 그룹의 무드 */}
+      <GlassBackground variant="personal" mood={mood?.key} />
 
       <View style={{ paddingTop: insets.top + 10 }}>
         {/* ── 채널 레일: 그룹 전환 (전역 '활동'은 하단 탭으로 이동) ── */}
@@ -369,7 +372,9 @@ export default function HomeScreen() {
                 accessibilityLabel="그룹 관리"
               >
                 {members.length > 0 && <AvatarStack members={members} size={22} />}
-                <Text style={styles.warmMeta}>{`멤버 ${members.length}명 · ${totalLinks}개의 링크`}</Text>
+                <Text
+                  style={[styles.warmMeta, { color: mood?.metaText ?? colors.textMuted }]}
+                >{`멤버 ${members.length}명 · ${totalLinks}개의 링크`}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -423,7 +428,7 @@ export default function HomeScreen() {
                     ? '인스타에서 본 맛집, 유튜브에서 본 카페 —\n폴더를 만들어 링크를 모아보세요'
                     : '친구와 함께 첫 폴더를 만들어보세요'
                 }
-                warmTone={!isPersonal}
+                mood={mood?.key}
               >
                 {canEdit && (
                   <Button size="small" onPress={openCreateFolder}>
@@ -451,7 +456,12 @@ export default function HomeScreen() {
       <InviteAcceptSheet token={inviteToken} onClose={clearInviteToken} />
 
       {/* ── 공유 인텐트 → 저장 위치 선택 (시안 09) ── */}
-      <SaveLinkSheet visible={!!pendingUrl} onClose={clearPendingUrl} initialUrl={pendingUrl} />
+      <SaveLinkSheet
+        visible={!!pendingUrl}
+        onClose={clearPendingUrl}
+        initialUrl={pendingUrl}
+        titleHint={pendingTitleHint}
+      />
 
       {/* ── 폴더 생성 — 이름 입력은 상단 고정, 버튼은 하단 고정 (색상/이모지만 스크롤) ── */}
       <BottomSheet
@@ -552,7 +562,8 @@ const styles = StyleSheet.create({
   },
   subMeta: { fontSize: 13, fontFamily: 'LINESeedKR', color: '#6A6488', marginTop: 4 }, // 라벤더 공기 위 메타 (v3)
   memberRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 6 },
-  warmMeta: { fontSize: 12, fontFamily: 'LINESeedKR', color: warm.text },
+  // color 는 사용처에서 현재 무드로 인라인 주입 (StyleSheet 안에서는 훅을 쓸 수 없음)
+  warmMeta: { fontSize: 12, fontFamily: 'LINESeedKR' },
   list: { paddingHorizontal: 22, paddingTop: 14 },
   gridWrap: { flex: 1 },
   skelRow: { flexDirection: 'row', gap: 11 },

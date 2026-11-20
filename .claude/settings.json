@@ -1,0 +1,46 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(bunx tsc --noEmit*)",
+      "Bash(bun run lint*)",
+      "Bash(bun run format*)",
+      "Bash(bun test*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git branch*)",
+      "Bash(axe *)",
+      "Bash(xcrun simctl *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Read(**/*.keystore)",
+      "Read(**/*.jks)",
+      "Read(**/*.p8)",
+      "Read(**/*.p12)",
+      "Read(**/*.pem)",
+      "Read(**/*.key)",
+      "Bash(supabase db reset*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git push * --force*)",
+      "Bash(git push * -f*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-secrets.sh\""
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,15 @@
+<resources>
+  <!--
+    공유 시트 Activity 전용 투명 테마.
+    창 자체는 완전히 투명 → 뒤에 공유한 앱 화면이 그대로 보이고, 딤/시트는 RN(BottomSheet)이 그린다.
+  -->
+  <style name="Theme.Moaring.ShareSheet" parent="Theme.AppCompat.Light.NoActionBar">
+    <item name="android:windowIsTranslucent">true</item>
+    <item name="android:windowBackground">@android:color/transparent</item>
+    <item name="android:windowNoTitle">true</item>
+    <item name="android:backgroundDimEnabled">false</item>
+    <item name="android:windowAnimationStyle">@null</item>
+    <item name="android:statusBarColor">@android:color/transparent</item>
+    <item name="android:navigationBarColor">@android:color/transparent</item>
+  </style>
+</resources>

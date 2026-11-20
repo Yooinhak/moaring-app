@@ -43,10 +43,27 @@ yarn-error.*
 /ios
 /android
 
-.claude
-.claude/
-!README.md
+# 로컬 Expo 모듈(modules/*)의 Gradle 빌드 산출물 — 소스는 커밋, 빌드 결과는 제외
+modules/*/android/build/
+modules/*/android/.cxx/
+modules/*/android/.gradle/
+
+# Claude Code — 공유 하네스만 추적, 개인 설정(settings.local.json 등)은 무시
+.claude/*
+!.claude/settings.json
+!.claude/skills/
+!.claude/hooks/
+
+# 마크다운 — 기본 무시, 문서·하네스는 추적
 *.md
+!README.md
+!CLAUDE.md
+!.claude/**/*.md
+!docs/**/*.md
+!.github/**/*.md
+
+# Supabase CLI 로컬 임시 파일
+supabase/.temp/
 
 # bkit
 .bkit/

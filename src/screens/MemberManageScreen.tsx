@@ -7,15 +7,17 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AlertDialog from '../components/AlertDialog';
+import { Avatar } from '../components/AvatarStack';
 import BottomSheet from '../components/BottomSheet';
 import Button from '../components/Button';
 import GlassBackground from '../components/GlassBackground';
 import { ChevronLeftIcon, PlusIcon, TrashIcon } from '../components/icons';
 import Input from '../components/Input';
 import MemberRow from '../components/MemberRow';
+import MoodSwatchRow from '../components/MoodSwatchRow';
 import InviteSheet from '../components/sheets/InviteSheet';
 import { useToast } from '../components/Toast';
-import { colors, getGroupColor, glass, shadows, typo, warm } from '../constants/theme';
+import { colors, glass, moods, resolveMoodKey, shadows, typo } from '../constants/theme';
 import { useGroup } from '../contexts/GroupContext';
 import {
   useActiveInviteQuery,
@@ -25,7 +27,9 @@ import {
   useGroupMembersQuery,
   useKickMember,
   useLeaveGroup,
+  useUpdateGroup,
 } from '../hooks/queries/useGroups';
+import { useCurrentMood } from '../hooks/useCurrentMood';
 import { MainStackParamList } from '../navigation/types';
 import { copyToClipboard, isClipboardAvailable } from '../utils/clipboard';
 import { lightTap } from '../utils/haptics';
@@ -44,6 +48,8 @@ type Nav = NativeStackNavigationProp<MainStackParamList, 'MemberManage'>;
 const DELETE_CONFIRMATION_TEXT = '삭제';
 
 export default function MemberManageScreen() {
+  // 이 화면은 항상 공유 그룹에서만 진입한다 (개인 공간엔 그룹 관리가 없음) → sunset 폴백은 방어용
+  const mood = useCurrentMood() ?? moods.sunset;
   const route = useRoute<MemberManageRouteProp>();
   const navigation = useNavigation<Nav>();
   const { groupId } = route.params;
@@ -53,6 +59,8 @@ export default function MemberManageScreen() {
   const { groups, selectGroup, refetchGroups } = useGroup();
   const group = groups.find((g) => g.id === groupId) ?? null;
   const isOwner = group?.role === 'owner';
+  /** 관리 중인 그룹의 무드 — 스와치·타일이 같은 소스(group.color)를 본다 */
+  const groupMood = moods[resolveMoodKey(group?.color)];
 
   const { data: members = [] } = useGroupMembersQuery(groupId);
   const changeRole = useChangeMemberRole(groupId);
@@ -60,6 +68,7 @@ export default function MemberManageScreen() {
   const createInvite = useCreateInvite(groupId);
   const deleteGroup = useDeleteGroup();
   const leaveGroup = useLeaveGroup();
+  const updateGroup = useUpdateGroup();
 
   // 시안 08: 활성 초대 링크 박스 + 복사
   const { data: activeInvite } = useActiveInviteQuery(groupId);
@@ -111,7 +120,7 @@ export default function MemberManageScreen() {
 
   return (
     <View style={styles.container}>
-      <GlassBackground variant="group" />
+      <GlassBackground mood={mood.key} />
 
       {/* ── 커스텀 헤더 ── */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
@@ -133,17 +142,21 @@ export default function MemberManageScreen() {
         contentContainerStyle={[styles.scroll, { paddingBottom: 40 + insets.bottom }]}
         showsVerticalScrollIndicator={false}
       >
-        {/* 그룹 카드 */}
+        {/* 그룹 카드 — 이 화면에서 가장 궁금한 건 "누가 있나"라 얼굴을 먼저 보여준다 */}
         <View style={styles.groupCard}>
-          <View style={[styles.groupTile, group && { backgroundColor: getGroupColor(group.id).bg }]}>
-            <Text style={styles.groupEmoji}>{group?.emoji ?? '📁'}</Text>
-          </View>
-          <View style={styles.groupInfo}>
-            <Text style={styles.groupName} numberOfLines={1}>
-              {group?.name ?? '그룹'}
-            </Text>
-            <Text style={styles.groupMeta}>멤버 {members.length}명</Text>
-          </View>
+          {members.length > 0 && (
+            <View style={styles.faceRow}>
+              {members.slice(0, 4).map((m, i) => (
+                <View key={m.userId} style={[styles.faceRing, i > 0 && styles.faceOverlap]}>
+                  <Avatar member={m} size={30} />
+                </View>
+              ))}
+            </View>
+          )}
+          <Text style={styles.groupName} numberOfLines={1}>
+            {group?.name ?? '그룹'}
+          </Text>
+          <Text style={[styles.groupMeta, { color: groupMood.metaText }]}>멤버 {members.length}명</Text>
         </View>
 
         {/* 초대 링크 박스 (시안 08) */}
@@ -162,8 +175,19 @@ export default function MemberManageScreen() {
           </TouchableOpacity>
         </View>
 
+        {/* 무드 변경 — owner 전용. 저장하면 GROUP_LIST 무효화 → 레일 칩·배경이 따라 바뀐다 */}
+        {isOwner && (
+          <View style={styles.moodSection}>
+            <Text style={[styles.capsLabel, styles.moodLabel, { color: mood.metaText }]}>무드</Text>
+            <MoodSwatchRow
+              value={resolveMoodKey(group?.color)}
+              onChange={(key) => updateGroup.mutate({ id: groupId, color: key })}
+            />
+          </View>
+        )}
+
         {/* 멤버 리스트 */}
-        <Text style={styles.capsLabel}>{`MEMBERS · ${members.length}`}</Text>
+        <Text style={[styles.capsLabel, { color: mood.metaText }]}>{`MEMBERS · ${members.length}`}</Text>
         <View style={styles.card}>
           {members.map((m, i) => (
             <View key={m.userId}>
@@ -340,28 +364,21 @@ const styles = StyleSheet.create({
   },
   scroll: { paddingHorizontal: 20, paddingTop: 16 },
   groupCard: {
-    flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
     backgroundColor: glass.bg,
     borderWidth: 1,
     borderColor: glass.border,
     borderRadius: 18,
-    padding: 13,
+    paddingVertical: 14,
+    paddingHorizontal: 13,
     ...shadows.warmCard,
   },
-  groupTile: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: warm.tile,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  groupEmoji: { fontSize: 21 },
-  groupInfo: { flex: 1, minWidth: 0, gap: 2 },
-  groupName: { fontSize: 16, fontFamily: 'LINESeedKR-Bold', color: colors.ink, letterSpacing: -0.32 },
-  groupMeta: { fontSize: 12, fontFamily: 'LINESeedKR', color: colors.textFaint },
+  faceRow: { flexDirection: 'row', marginBottom: 8 },
+  faceRing: { borderRadius: 17, borderWidth: 2, borderColor: colors.white },
+  faceOverlap: { marginLeft: -9 },
+  groupName: { fontSize: 17, fontFamily: 'LINESeedKR-Bold', color: colors.ink, letterSpacing: -0.34 },
+  // color 는 사용처에서 무드로 주입
+  groupMeta: { fontSize: 12, fontFamily: 'LINESeedKR', marginTop: 3 },
   linkBox: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -385,13 +402,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   copyText: { fontSize: 13, fontFamily: 'LINESeedKR-Bold', color: colors.white },
+  // color 는 사용처에서 현재 무드로 인라인 주입 (StyleSheet 안에서는 훅을 쓸 수 없음)
   capsLabel: {
     ...typo.sectionLabel,
-    color: warm.text,
     marginTop: 18,
     marginBottom: 9,
     marginLeft: 2,
   },
+  moodSection: { marginTop: 24, gap: 11 },
+  // capsLabel 의 세로 여백은 moodSection 의 marginTop/gap 이 대신한다 (이중 여백 방지)
+  moodLabel: { marginTop: 0, marginBottom: 0 },
   card: {
     backgroundColor: glass.bg,
     borderWidth: 1,

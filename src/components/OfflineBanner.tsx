@@ -1,9 +1,8 @@
 import React, { useEffect, useRef } from 'react';
 
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { Animated, StyleSheet, Text, View } from 'react-native';
 
 import { useNetInfo } from '@react-native-community/netinfo';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors } from '../constants/theme';
 
@@ -11,7 +10,6 @@ import { WifiOffIcon } from './icons';
 
 export default function OfflineBanner() {
   const { isConnected } = useNetInfo();
-  const insets = useSafeAreaInsets();
   const height = useRef(new Animated.Value(0)).current;
 
   const isOffline = isConnected === false;
@@ -22,10 +20,10 @@ export default function OfflineBanner() {
       duration: 250,
       useNativeDriver: false,
     }).start();
-  }, [isOffline]);
+  }, [isOffline, height]);
 
   return (
-    <Animated.View style={[styles.container, { height, marginTop: isOffline ? 0 : 0 }]}>
+    <Animated.View style={[styles.container, { height }]}>
       <View style={styles.content}>
         <WifiOffIcon size={16} color={colors.white} />
         <Text style={styles.text}>오프라인 상태입니다</Text>

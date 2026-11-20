@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { StackAvatar } from '../../components/AvatarStack';
 import { useToast } from '../../components/Toast';
 import { queryKeys } from '../../utils/react-query/queryKeys';
 import { supabase } from '../../utils/supabase/client';
@@ -10,7 +11,7 @@ export type GroupRole = 'owner' | 'editor' | 'viewer';
 export interface GroupSummary {
   id: string;
   name: string;
-  emoji: string | null;
+  /** 무드 키 저장소 (레거시 폴더색·null 은 resolveMoodKey 가 sunset 으로 폴백) */
   color: string | null;
   type: 'personal' | 'shared';
   createdAt: string;
@@ -30,7 +31,8 @@ export interface GroupMember {
 export interface InvitePreview {
   valid: boolean;
   group_name?: string;
-  group_emoji?: string | null;
+  /** 그룹 무드 키 (preview_invite 가 아직 안 내려주면 undefined → sunset 폴백) */
+  group_color?: string | null;
   role?: GroupRole;
   member_count?: number;
 }
@@ -51,7 +53,7 @@ export function useMyGroupsQuery(enabled = true) {
 
       const { data, error } = await supabase
         .from('group_members')
-        .select('role, joined_at, group:groups(id, name, emoji, color, type, created_at, members:group_members(count))')
+        .select('role, joined_at, group:groups(id, name, color, type, created_at, members:group_members(count))')
         .eq('user_id', uid);
       if (error) throw error;
 
@@ -63,7 +65,6 @@ export function useMyGroupsQuery(enabled = true) {
           return {
             id: g.id,
             name: g.name,
-            emoji: g.emoji,
             color: g.color,
             type: (g.type === 'personal' ? 'personal' : 'shared') as GroupSummary['type'],
             createdAt: g.created_at,
@@ -121,6 +122,55 @@ export function useGroupMembersQuery(groupId: string | null) {
   });
 }
 
+export interface GroupMembersPreview {
+  count: number;
+  /** 합류순 최대 3명 (레일은 2+N 로 자름) */
+  members: StackAvatar[];
+}
+
+/** 레일 칩 마이크로 아바타용 — 내 공유 그룹 전체의 멤버 프리뷰를 한 번에. */
+export function useGroupMembersPreviewQuery(groupIds: string[]) {
+  const key = [...groupIds].sort().join(',');
+  return useQuery({
+    queryKey: [queryKeys.GROUP_MEMBERS_PREVIEW, key],
+    enabled: groupIds.length > 0,
+    staleTime: 60_000,
+    queryFn: async (): Promise<Record<string, GroupMembersPreview>> => {
+      const { data: rows, error } = await supabase
+        .from('group_members')
+        .select('group_id, user_id, joined_at')
+        .in('group_id', groupIds)
+        .order('joined_at', { ascending: true });
+      if (error) throw error;
+
+      const ids = [...new Set((rows ?? []).map((r) => r.user_id))];
+      const profileMap = new Map<string, { display_name: string | null; avatar_url: string | null }>();
+      if (ids.length > 0) {
+        const { data: profiles, error: pErr } = await supabase
+          .from('profiles')
+          .select('id, display_name, avatar_url')
+          .in('id', ids);
+        if (pErr) throw pErr;
+        for (const p of profiles ?? []) profileMap.set(p.id, p);
+      }
+
+      const out: Record<string, GroupMembersPreview> = {};
+      for (const r of rows ?? []) {
+        const entry = (out[r.group_id] ??= { count: 0, members: [] });
+        entry.count += 1;
+        if (entry.members.length < 3) {
+          entry.members.push({
+            userId: r.user_id,
+            displayName: profileMap.get(r.user_id)?.display_name ?? null,
+            avatarUrl: profileMap.get(r.user_id)?.avatar_url ?? null,
+          });
+        }
+      }
+      return out;
+    },
+  });
+}
+
 /** 현재 유효한 초대 (있으면 재사용, 없으면 null) */
 export function useActiveInviteQuery(groupId: string | null) {
   return useQuery({
@@ -164,7 +214,7 @@ export function useCreateGroup() {
   const { showToast } = useToast();
 
   return useMutation({
-    mutationFn: async (params: { name: string; emoji: string | null; color: string }) => {
+    mutationFn: async (params: { name: string; color: string }) => {
       const { data: auth } = await supabase.auth.getUser();
       const uid = auth.user?.id;
       if (!uid) throw new Error('AUTH_REQUIRED');
@@ -191,7 +241,7 @@ export function useUpdateGroup() {
   const { showToast } = useToast();
 
   return useMutation({
-    mutationFn: async (params: { id: string; name?: string; emoji?: string | null; color?: string }) => {
+    mutationFn: async (params: { id: string; name?: string; color?: string }) => {
       const { id, ...rest } = params;
       const { error } = await supabase.from('groups').update(rest).eq('id', id);
       if (error) throw error;
@@ -283,6 +333,7 @@ export function useKickMember(groupId: string) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_MEMBERS, groupId] });
+      queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_MEMBERS_PREVIEW] });
       queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_LIST] });
       showToast('success', '멤버를 내보냈어요');
     },
@@ -338,6 +389,7 @@ export function useJoinGroup() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_LIST] });
+      queryClient.invalidateQueries({ queryKey: [queryKeys.GROUP_MEMBERS_PREVIEW] });
     },
   });
 }

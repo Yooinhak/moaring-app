@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Session, User } from '@supabase/supabase-js';
 
 import { normalizeAvatarUrl } from '../utils/avatarUrl';
+import { queryClient } from '../utils/react-query/queryClient';
 import { supabase } from '../utils/supabase/client';
 
 /**
@@ -35,6 +37,26 @@ async function syncProfile(user: User) {
   if (error) console.warn('[useAuth] profiles 동기화 실패:', error.message);
 }
 
+/**
+ * 로그아웃 시 이전 계정의 흔적을 지운다.
+ *
+ * 캐시 키에 사용자 식별자가 없고 gcTime 이 10분이라, 이걸 안 하면 다른 계정으로
+ * 재로그인했을 때 **이전 사용자의 그룹명·폴더명·프로필이 먼저 그려진 뒤** 교체된다.
+ * (계정 삭제 → 재가입 흐름에서 특히 잘 재현된다)
+ *
+ * 기기 설정(뷰 모드·정렬·최근 이모지)은 계정과 무관하므로 남긴다.
+ */
+function clearAccountScopedData() {
+  queryClient.clear();
+  AsyncStorage.multiRemove([
+    'moaring.currentGroupId', // GroupContext
+    'moaring.groupLastSeen', // useActivityUnread
+    'moaring.recentFolderId', // SaveLinkSheet
+  ]).catch(() => {
+    // 스토리지 정리 실패가 로그아웃을 막을 이유는 없다
+  });
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +74,7 @@ export function useAuth() {
       setSession(session);
       // 새 로그인 시에만 동기화(TOKEN_REFRESHED 등 반복 이벤트에는 upsert 안 함).
       if (event === 'SIGNED_IN' && session?.user) syncProfile(session.user);
+      if (event === 'SIGNED_OUT') clearAccountScopedData();
     });
 
     return () => subscription.unsubscribe();

@@ -2,14 +2,15 @@ import React, { useEffect, useState } from 'react';
 
 import { Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { colors, typo, warm } from '../../constants/theme';
-import { useGroup } from '../../contexts/GroupContext';
+import { colors, moods, typo } from '../../constants/theme';
 import { GroupRole, useActiveInviteQuery, useCreateInvite } from '../../hooks/queries/useGroups';
+import { useCurrentMood } from '../../hooks/useCurrentMood';
 import { copyToClipboard, isClipboardAvailable } from '../../utils/clipboard';
 import { lightTap } from '../../utils/haptics';
 import { buildInviteMessage, buildInviteUrl } from '../../utils/inviteLink';
 import BottomSheet from '../BottomSheet';
 import { LinkIcon, Share2Icon } from '../icons';
+import MoodWash from '../MoodWash';
 import { useToast } from '../Toast';
 
 /**
@@ -33,11 +34,10 @@ const ROLE_OPTIONS: { key: InviteRole; label: string; desc: string }[] = [
 ];
 
 export default function InviteSheet({ visible, onClose, groupId, groupName }: InviteSheetProps) {
+  // 초대는 공유 그룹에서만 열린다 (생성 직후에는 아직 현재 그룹이 아닐 수 있어 sunset 폴백)
+  const mood = useCurrentMood() ?? moods.sunset;
   const { showToast } = useToast();
-  const { groups } = useGroup();
   const [role, setRole] = useState<InviteRole>('editor');
-
-  const groupEmoji = groups.find((g) => g.id === groupId)?.emoji ?? '🍊';
 
   const { data: activeInvite, isLoading } = useActiveInviteQuery(visible ? groupId : null);
   const createInvite = useCreateInvite(groupId ?? '');
@@ -76,8 +76,9 @@ export default function InviteSheet({ visible, onClose, groupId, groupName }: In
     <BottomSheet visible={visible} onClose={onClose}>
       {/* 헤더: 이모지 타일 + 타이틀 (시안 04) */}
       <View style={styles.headerRow}>
-        <View style={styles.emojiTile}>
-          <Text style={styles.emojiText}>{groupEmoji}</Text>
+        {/* 그룹 타일 = 그 그룹의 공기 (이모지 폐지) */}
+        <View style={[styles.moodTile, { shadowColor: mood.accent }]}>
+          <MoodWash colors={[mood.stops[0], mood.stops[2]]} />
         </View>
         <View style={styles.headerText}>
           <Text style={styles.title}>친구를 초대해보세요</Text>
@@ -150,21 +151,16 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 4,
   },
-  emojiTile: {
+  // backgroundColor/shadowColor 는 사용처에서 현재 무드로 인라인 주입
+  moodTile: {
     width: 50,
     height: 50,
     borderRadius: 16,
-    backgroundColor: warm.tile,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: warm.accent,
+    overflow: 'hidden', // MoodWash(absoluteFill) 클리핑
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.18,
     shadowRadius: 14,
     elevation: 2,
-  },
-  emojiText: {
-    fontSize: 25,
   },
   headerText: { flex: 1, minWidth: 0, gap: 2 },
   title: {

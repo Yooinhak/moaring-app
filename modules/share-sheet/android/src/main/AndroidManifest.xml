@@ -1,0 +1,27 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+  <application>
+    <!--
+      다른 앱의 "공유하기" → 모아링 선택 시 뜨는 투명 Activity.
+      - taskAffinity="" : 모아링 메인 태스크에 끼어들지 않는다. 그래야 공유한 앱(인스타 등)
+        위에 시트만 겹쳐 보이고, 백그라운드에 있던 모아링 메인 화면이 딸려 올라오지 않는다.
+      - excludeFromRecents : 저장 후 최근 앱 목록에 빈 태스크가 남지 않게.
+      - SEND intent-filter 는 여기에만 둔다 (MainActivity 쪽은 app.config.js 플러그인이 제거).
+    -->
+    <activity
+      android:name="dev.inak.moaring.sharesheet.ShareSheetActivity"
+      android:theme="@style/Theme.Moaring.ShareSheet"
+      android:exported="true"
+      android:taskAffinity=""
+      android:excludeFromRecents="true"
+      android:launchMode="standard"
+      android:screenOrientation="portrait"
+      android:windowSoftInputMode="adjustResize"
+      android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <data android:mimeType="text/plain"/>
+      </intent-filter>
+    </activity>
+  </application>
+</manifest>

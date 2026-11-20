@@ -8,6 +8,7 @@ import {
   Platform,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 
@@ -20,6 +21,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { colors, radius, shadows } from '../constants/theme';
+
+import { ChevronLeftIcon } from './icons';
 
 /**
  * 공용 바텀시트 — @gorhom/bottom-sheet 의 "인라인" 컴포넌트(기본 export) 구현.
@@ -46,6 +49,10 @@ import { colors, radius, shadows } from '../constants/theme';
  * - 시트 최대 높이 75% (기존 85% — 꽉 차게 올라와 부담스럽다는 피드백 반영).
  *
  * 프롭 API(visible/onClose/title/description/children)는 기존과 호환 — fixedTop/footer 는 선택.
+ *
+ * 시트 안 화면 전환 (2026-10-23, 공유 시트 새 폴더):
+ * - `onBack` 을 주면 타이틀 왼쪽에 ‹ 가 생기고, Android 뒤로 버튼도 시트를 닫는 대신 onBack 을 부른다.
+ * - `headerRight` 는 타이틀 줄 오른쪽 끝 액션(예: ＋ 새 폴더).
  */
 
 interface BottomSheetProps {
@@ -57,6 +64,10 @@ interface BottomSheetProps {
   fixedTop?: React.ReactNode;
   /** 시트 하단에 고정되는 영역 (예: 저장/취소 버튼) */
   footer?: React.ReactNode;
+  /** 시트 안 이전 화면으로 — 헤더 ‹ 버튼 + Android 뒤로 버튼이 시트를 닫지 않고 이걸 부른다 */
+  onBack?: () => void;
+  /** 타이틀 줄 오른쪽 끝 액션 */
+  headerRight?: React.ReactNode;
   children: React.ReactNode;
 }
 
@@ -72,6 +83,8 @@ export default function BottomSheet({
   description,
   fixedTop,
   footer,
+  onBack,
+  headerRight,
   children,
 }: BottomSheetProps) {
   const ref = useRef<BottomSheetInline>(null);
@@ -122,7 +135,7 @@ export default function BottomSheet({
     const scrollPad = 8 + (hasFooter ? 0 : bottomPadding);
     const measured =
       contentHeight > 0
-        ? topHeight + contentHeight + scrollPad + footerHeight + CHROME_HEIGHT
+        ? topHeight + contentHeight + scrollPad + (hasFooter ? footerHeight : 0) + CHROME_HEIGHT
         : SCREEN_HEIGHT * 0.45;
     // 키보드가 떠 있으면 시트를 그만큼 위로 올리므로(bottomInset), 시트 높이도
     // (화면 - 상단 인셋 - 키보드) 안으로 제한해야 한다. 이 클램프가 없으면 시트
@@ -168,7 +181,7 @@ export default function BottomSheet({
   // 튀어나옴). 대신 시트 높이 - 크롬 - 상단 - 푸터 를 스크롤 maxHeight 로 박으면, 콘텐츠가
   // 아무리 길어도 가운데만 스크롤되고 하단 고정 푸터가 항상 제자리에 남는다 (2026-07-16).
   const scrollMaxHeight = Math.max(
-    snapPoints[0] - CHROME_HEIGHT - topHeight - footerHeight - 8,
+    snapPoints[0] - CHROME_HEIGHT - topHeight - (hasFooter ? footerHeight : 0) - 8,
     96,
   );
 
@@ -181,7 +194,7 @@ export default function BottomSheet({
       visible
       transparent
       animationType="none" // 등장/퇴장 애니메이션은 gorhom 이 담당
-      onRequestClose={() => ref.current?.close()} // Android 뒤로가기 → 시트 닫기
+      onRequestClose={() => (onBack ? onBack() : ref.current?.close())} // Android 뒤로가기 → 이전 화면 또는 시트 닫기
       statusBarTranslucent
       // NOTE: navigationBarTranslucent 금지(2026-07-10) — 시트 하단이 시스템 바에 가려짐.
     >
@@ -212,9 +225,23 @@ export default function BottomSheet({
               <View style={styles.topArea} onLayout={onTopLayout}>
                 {title && (
                   <View style={styles.header}>
-                    <Text style={styles.title} accessibilityRole="header">
-                      {title}
-                    </Text>
+                    <View style={styles.titleRow}>
+                      {onBack && (
+                        <TouchableOpacity
+                          onPress={onBack}
+                          hitSlop={12}
+                          style={styles.backBtn}
+                          accessibilityRole="button"
+                          accessibilityLabel="뒤로"
+                        >
+                          <ChevronLeftIcon size={22} color={colors.ink} strokeWidth={2.4} />
+                        </TouchableOpacity>
+                      )}
+                      <Text style={styles.title} accessibilityRole="header">
+                        {title}
+                      </Text>
+                      {headerRight}
+                    </View>
                     {description && <Text style={styles.description}>{description}</Text>}
                   </View>
                 )}
@@ -307,7 +334,16 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 4,
   },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  backBtn: {
+    marginLeft: -6, // 아이콘 여백만큼 당겨 타이틀 시작선과 시각적으로 맞춘다
+  },
   title: {
+    flex: 1,
     fontSize: 20,
     fontFamily: 'LINESeedKR-Bold',
     color: colors.ink,

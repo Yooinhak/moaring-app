@@ -22,6 +22,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# .env 누락 시 실행 즉시 죽는 빌드가 나오므로 먼저 막는다 (scripts/check-env.js 참고)
+node scripts/check-env.js
+
 VERSION="${1:-}"
 if [[ -z "$VERSION" ]]; then
   echo "❌ 버전을 넘겨주세요.  예:  bun run release:android 0.0.3"
@@ -77,6 +80,9 @@ fi
 echo "🏗️  빌드 모드: $MODE"
 if [[ "$MODE" == "clean" ]]; then
   echo "🧹 SHARE_INTENT=1 prebuild --clean (android/ 재생성)"
+  # Finder 창이 android/ 안을 열고 있으면, 지우는 사이 .DS_Store 를 다시 써서
+  # prebuild --clean 이 ENOTEMPTY 로 실패한다 → 먼저 직접 지운다(재시도 3회).
+  for _ in 1 2 3; do rm -rf android 2>/dev/null && break; sleep 1; done
   SHARE_INTENT=1 npx expo prebuild -p android --clean
 elif [[ "$MODE" == "prebuild" ]]; then
   echo "🔧 SHARE_INTENT=1 prebuild (설정 동기화)"
@@ -112,4 +118,8 @@ fi
 
 echo "🎉 릴리스 v$VERSION 완료!"
 echo "   (버전 파일이 바뀌었어요 — 커밋하려면:  git add app.json package.json src/screens/ProfileScreen.tsx && git commit -m \"chore. $VERSION 릴리스\")"
-if [[ "$(uname)" == "Darwin" ]]; then open -R "$APK" 2>/dev/null || true; fi
+# Finder 로는 android/ 밖의 dist/ 복사본을 연다. android/ 안을 열어두면 다음 clean 빌드가
+# 그 창이 써넣는 .DS_Store 때문에 android/ 를 못 지우고 실패한다.
+mkdir -p dist && cp "$APK" "dist/$DEST_NAME"
+echo "📦 로컬 사본: dist/$DEST_NAME"
+if [[ "$(uname)" == "Darwin" ]]; then open -R "dist/$DEST_NAME" 2>/dev/null || true; fi

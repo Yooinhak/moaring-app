@@ -88,17 +88,13 @@ export const glass = {
 
 /**
  * 공기(배경) 그라디언트 — GlassBackground 에서 사용.
- * personal = 블루 공기 · group = 웜 공기 · login = 딥 블루 공기.
+ * personal = 라벤더 공기 · login = 딥 블루 공기.
+ * 공유 그룹의 공기는 moods 가 담당한다 ('group' variant 는 sunset 으로 하위 호환 처리).
  */
 export const air = {
-  // v3 (Linkle 2a 파이널): personal = 라벤더 공기, group = 웜 공기 유지
   personal: {
     stops: ['#E2DDFF', '#F0EDFC', '#F6F9FE'],
     locations: [0, 0.34, 1],
-  },
-  group: {
-    stops: ['#FFE9D6', '#F4F0FA', '#F6F9FE'],
-    locations: [0, 0.3, 1],
   },
   login: {
     stops: ['#D6CEFF', '#EBE6FC', '#F6F9FE'],
@@ -106,14 +102,119 @@ export const air = {
   },
 } as const;
 
-export type AirVariant = keyof typeof air;
+/** 'group' 은 air 에 항목이 없는 레거시 별칭 — GlassBackground 가 moods.sunset 으로 해석한다. */
+export type AirVariant = 'personal' | 'group' | 'login';
 
-/** 웜(그룹) 공기 전용 보조 텍스트 색 — 시안 06 */
-export const warm = {
-  text: '#A16207', // 웜 배경 위 메타 텍스트
-  accent: '#F97316', // 웜 포인트 (새 폴더 대시 보더 등)
-  tile: '#FFF3E4', // 웜 아이콘 타일 배경
+/**
+ * 무드(공기) 토큰 — 그룹 아이덴티티 = 무드 1개 (설계: group-mood-air.design.md).
+ * 제약: 모든 무드의 마지막 스톱은 #F6F9FE 수렴 (glass/ink 대비 보장).
+ * 색값은 실기기 튜닝 전제의 시작값. 커스텀 무드는 의도적으로 없음 — 확장은 여기에 행 추가.
+ */
+export const MOOD_ORDER = ['sunset', 'mint', 'rose', 'citrus', 'dusk'] as const;
+export type MoodKey = (typeof MOOD_ORDER)[number];
+
+export interface Mood {
+  key: MoodKey;
+  label: string;
+  stops: readonly [string, string, string];
+  locations: readonly [number, number, number];
+  orbs: ReadonlyArray<{ cx: number; cy: number; r: number; color: string; opacity: number }>;
+  /** 대시 보더·포인트·활성 칩 보더 (구 warm.accent 역할) */
+  accent: string;
+  /** 공기 위 보조 텍스트 (구 warm.text 역할) */
+  metaText: string;
+  /** 아이콘 타일 bg (구 warm.tile 역할) */
+  tile: string;
+  /** 레일 칩 색유리 워시 [위, 아래] — 비활성은 opacity 로 옅게 */
+  chipWash: readonly [string, string];
+  /** EmptyState 일러스트 팔레트 */
+  illust: { deep: string; primary: string; pastel: string; tint: string };
+}
+
+export const moods: Record<MoodKey, Mood> = {
+  // 현 웜 공기 승계 — 레거시 그룹('blue'/null)이 이 무드로 폴백되어 배포 당일 화면 변화 제로
+  sunset: {
+    key: 'sunset',
+    label: '노을',
+    stops: ['#FFE9D6', '#F4F0FA', '#F6F9FE'],
+    locations: [0, 0.3, 1],
+    orbs: [
+      { cx: 350, cy: 50, r: 135, color: '#FF9A3D', opacity: 0.35 },
+      { cx: 20, cy: 120, r: 110, color: '#FFC49A', opacity: 0.25 },
+    ],
+    accent: '#F97316',
+    metaText: '#A16207',
+    tile: '#FFF3E4',
+    chipWash: ['#FFE3C2', '#FFF3E6'],
+    illust: { deep: '#C2410C', primary: '#F97316', pastel: '#FDBA74', tint: '#FFF3E4' },
+  },
+  mint: {
+    key: 'mint',
+    label: '민트',
+    stops: ['#D9F5EA', '#EDF7F3', '#F6F9FE'],
+    locations: [0, 0.32, 1],
+    orbs: [
+      { cx: 340, cy: 55, r: 135, color: '#34D399', opacity: 0.3 },
+      { cx: 30, cy: 110, r: 110, color: '#A7F3D0', opacity: 0.25 },
+    ],
+    accent: '#10B981',
+    metaText: '#047857',
+    tile: '#E3F7EF',
+    chipWash: ['#D9F5EA', '#F0FBF6'],
+    illust: { deep: '#047857', primary: '#10B981', pastel: '#6EE7B7', tint: '#E3F7EF' },
+  },
+  rose: {
+    key: 'rose',
+    label: '로즈',
+    stops: ['#FFE0EC', '#F8EEF5', '#F6F9FE'],
+    locations: [0, 0.3, 1],
+    orbs: [
+      { cx: 340, cy: 55, r: 135, color: '#F472B6', opacity: 0.3 },
+      { cx: 30, cy: 110, r: 110, color: '#FBCFE3', opacity: 0.28 },
+    ],
+    accent: '#EC4899',
+    metaText: '#9D2463',
+    tile: '#FDE7F1',
+    chipWash: ['#FFDFEB', '#FFF0F6'],
+    illust: { deep: '#BE185D', primary: '#EC4899', pastel: '#F9A8D4', tint: '#FDE7F1' },
+  },
+  citrus: {
+    key: 'citrus',
+    label: '시트러스',
+    stops: ['#FFF3C9', '#F8F3E7', '#F6F9FE'],
+    locations: [0, 0.3, 1],
+    orbs: [
+      { cx: 340, cy: 55, r: 135, color: '#FBBF24', opacity: 0.32 },
+      { cx: 30, cy: 110, r: 110, color: '#FDE68A', opacity: 0.26 },
+    ],
+    accent: '#F59E0B',
+    metaText: '#854F0B',
+    tile: '#FEF3D7',
+    chipWash: ['#FFF0C2', '#FFF9E5'],
+    illust: { deep: '#B45309', primary: '#F59E0B', pastel: '#FCD34D', tint: '#FEF3D7' },
+  },
+  dusk: {
+    key: 'dusk',
+    label: '저녁',
+    stops: ['#D8E2FF', '#EAEDFB', '#F6F9FE'],
+    locations: [0, 0.3, 1],
+    orbs: [
+      { cx: 340, cy: 55, r: 135, color: '#818CF8', opacity: 0.34 },
+      { cx: 30, cy: 110, r: 110, color: '#C7D2FE', opacity: 0.26 },
+    ],
+    accent: '#6366F1',
+    metaText: '#4338CA',
+    tile: '#E4E9FF',
+    chipWash: ['#D8E2FF', '#EEF1FF'],
+    illust: { deep: '#4338CA', primary: '#6366F1', pastel: '#A5B4FC', tint: '#E4E9FF' },
+  },
 } as const;
+
+/** groups.color → 무드 키. 미지값·레거시 'blue'·null 은 전부 sunset 폴백 (이관 전략). */
+export function resolveMoodKey(color: string | null | undefined): MoodKey {
+  return color && (MOOD_ORDER as readonly string[]).includes(color) ? (color as MoodKey) : 'sunset';
+}
+
 export const folderColors = [
   { key: 'blue', icon: '#3182F6', bg: '#E8F3FF' },
   { key: 'purple', icon: '#8B5CF6', bg: '#F3EEFF' },
@@ -133,6 +234,8 @@ export function getFolderColor(key?: string | null) {
  * 그룹 id → 안정적인 팔레트 색. 그룹은 색 속성이 없어 레일/타일에서 이모지에만
  * 의존해 구분됐는데(모델 비대칭), id 해시로 일관된 색을 부여해 식별성을 높인다.
  * (스키마 변경 없이 클라이언트에서 결정적으로 계산)
+ *
+ * @deprecated 무드 체계로 대체됨(group-mood-air). 롤백 안전판으로 보존.
  */
 export function getGroupColor(id: string) {
   let h = 0;

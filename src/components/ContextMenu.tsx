@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 
-import { colors } from '../constants/theme';
+import { colors, radius } from '../constants/theme';
 
 export interface ContextMenuItem {
   label: string;
@@ -37,7 +37,7 @@ export default function ContextMenu({ items, trigger }: ContextMenuProps) {
       const triggerRight = screenWidth - (x + width);
 
       setPosition({
-        top: y + height + 6,
+        top: y + height + 8,
         right: Math.max(triggerRight - 4, 12),
       });
       setVisible(true);
@@ -72,22 +72,24 @@ export default function ContextMenu({ items, trigger }: ContextMenuProps) {
             onStartShouldSetResponder={() => true}
           >
             {items.map((item, index) => (
-              <TouchableOpacity
-                key={index}
-                style={[styles.menuItem, index < items.length - 1 && styles.menuItemBorder]}
-                onPress={() => {
-                  setVisible(false);
-                  setTimeout(item.onPress, 200);
-                }}
-                activeOpacity={0.5}
-                accessibilityRole="menuitem"
-                accessibilityLabel={item.label}
-              >
-                {item.icon && <View style={styles.menuIcon}>{item.icon}</View>}
-                <Text style={[styles.menuText, item.destructive && styles.destructiveText]}>
-                  {item.label}
-                </Text>
-              </TouchableOpacity>
+              <React.Fragment key={index}>
+                {index > 0 && <View style={styles.divider} />}
+                <TouchableOpacity
+                  style={styles.menuItem}
+                  onPress={() => {
+                    setVisible(false);
+                    setTimeout(item.onPress, 200);
+                  }}
+                  activeOpacity={0.6}
+                  accessibilityRole="menuitem"
+                  accessibilityLabel={item.label}
+                >
+                  {item.icon && <View style={styles.menuIcon}>{item.icon}</View>}
+                  <Text style={[styles.menuText, item.destructive && styles.destructiveText]}>
+                    {item.label}
+                  </Text>
+                </TouchableOpacity>
+              </React.Fragment>
             ))}
           </View>
         </Pressable>
@@ -100,34 +102,41 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
   },
+  // v4: 검정 그림자(#000) → 인디고 틴트 (theme.ts v3 규칙). 흰 배경 위 흰 메뉴가
+  // 떠 보이도록 연한 인디고 보더를 더하고, 항목 패딩을 줄여 카드를 덜 가리게 했다.
   menu: {
     position: 'absolute',
     backgroundColor: colors.white,
-    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(139,126,242,0.16)',
+    borderRadius: radius.button,
     minWidth: MENU_WIDTH,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 16,
-    elevation: 12,
-    paddingVertical: 4,
+    shadowColor: colors.primaryDeep,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 26,
+    elevation: 10,
+    padding: 5,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 9,
+    borderRadius: 11, // 바깥(16)보다 타이트하게 — 중첩 라운드 규칙
   },
-  menuItemBorder: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.gray[100],
+  divider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.divider,
+    marginVertical: 4,
+    marginHorizontal: 9,
   },
   menuIcon: {
-    marginRight: 10,
+    marginRight: 9,
   },
   menuText: {
-    fontSize: 15,
-    color: colors.gray[800],
+    fontSize: 14,
+    color: colors.text,
     fontFamily: 'LINESeedKR',
   },
   destructiveText: {

@@ -2,12 +2,13 @@ import React from 'react';
 
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
-import { colors, warm } from '../../constants/theme';
+import { colors, moods, resolveMoodKey } from '../../constants/theme';
 import { useGroup } from '../../contexts/GroupContext';
 import { useInvitePreviewQuery, useJoinGroup } from '../../hooks/queries/useGroups';
 import BottomSheet from '../BottomSheet';
 import Button from '../Button';
 import { PencilIcon, UsersIcon } from '../icons';
+import MoodWash from '../MoodWash';
 import { useToast } from '../Toast';
 
 /**
@@ -45,6 +46,9 @@ export default function InviteAcceptSheet({ token, onClose }: InviteAcceptSheetP
 
   const valid = preview?.valid === true;
   const isEditor = preview?.role !== 'viewer';
+  // 아직 그룹에 속하지 않은 사용자가 보는 시트라 useCurrentMood 를 쓸 수 없다 →
+  // 초대 프리뷰가 알려준 그룹 색으로 무드를 해석 (미지값/누락은 sunset 폴백).
+  const m = moods[resolveMoodKey(preview?.group_color)];
 
   return (
     <BottomSheet visible={!!token} onClose={onClose} title="그룹 초대">
@@ -66,8 +70,8 @@ export default function InviteAcceptSheet({ token, onClose }: InviteAcceptSheetP
         </View>
       ) : (
         <View style={styles.center}>
-          <View style={styles.groupTile}>
-            <Text style={styles.groupEmoji}>{preview?.group_emoji ?? '📁'}</Text>
+          <View style={[styles.groupTile, { backgroundColor: m.tile, shadowColor: m.accent }]}>
+            <MoodWash colors={[m.stops[0], m.stops[2]]} />
           </View>
           <Text style={styles.groupName}>{preview?.group_name}</Text>
           <View style={styles.metaRow}>
@@ -99,22 +103,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
   },
-  // 블루 글래스 시안 05: 웜 이모지 타일 + 웜 그림자
+  // 그룹 아이덴티티 = 무드 → 이모지 대신 색유리 스와치 타일.
+  // backgroundColor/shadowColor 는 사용처에서 해당 그룹 무드로 인라인 주입.
   groupTile: {
     width: 70,
     height: 70,
     borderRadius: 22,
-    backgroundColor: warm.tile,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: warm.accent,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.2,
     shadowRadius: 24,
     elevation: 3,
-  },
-  groupEmoji: {
-    fontSize: 35,
   },
   groupName: {
     fontSize: 23,
