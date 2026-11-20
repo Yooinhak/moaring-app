@@ -7,6 +7,8 @@
 //                            <span class="UsernameText">, <div class="Caption"><a class="CaptionUsername">…</a><br />캡션…<div class="CaptionComments">.
 //                            /p/·/reel/ 코드 호환(리다이렉트 0) — 항상 /p/<code>/ 로 통일해 요청한다. igsh 제거는 응답에 영향 없음
 //   삭제·비공개              페이지는 302 → /<user>/ 프로필, 임베드는 200 + class="EmbedBrokenMedia"(≈184 KB) → unsupported('gone')
+//   임베드 비허용 글          임베드는 똑같이 EmbedBrokenMedia 지만 페이지는 200 + og:image (2026-11-17 운영 관측) →
+//                            EmbedBrokenMedia 만으로는 삭제로 보지 않고 페이지 og 폴백, 프로필 리다이렉트일 때만 gone
 //   썸네일 CDN               oe=(hex epoch) 서명 ~4.4일 뒤 만료, 쿼리 제거 시 403 'Bad URL hash' → 같은 처리 안에서 즉시 복사, 쿼리 변경 금지
 //   Threads                 게시물 페이지 og 완비: og:title 'Name (@handle) on Threads', og:description = 본문, og:image = 아바타
 //                            (경로 t51.82787-19 → placeholders.ts 가 이미 제외). threads.net → .com 301. 첨부 미디어 글은 미검증
@@ -297,20 +299,24 @@ async function runInstagram(ctx: ProviderCtx): Promise<ProviderOutcome> {
   }
 
   let partial: PreviewFields | null = null; // 임베드가 이미지 없이 작성자·캡션만 준 경우
+  let embedBroken = false; // 삭제 또는 임베드 비허용 — 페이지로 가른다
   if (embed) {
     const landing = classifyInstagramUrl(embed.finalUrl);
     if (landing === 'profile') return gone();
     if (isOk(embed.status) && landing !== 'login') {
       const raw = parseInstagramEmbedRaw(embed.text);
-      if (raw.broken) return gone();
-      const fields = embedFields(raw, storeCaption);
+      embedBroken = raw.broken;
+      const fields = raw.broken ? null : embedFields(raw, storeCaption);
       if (fields && raw.imageCandidates.length > 0) {
         // 캡션이 없을 때만 공유 텍스트 힌트가 합성 제목('@user • Instagram') 보다 낫다
         const title = raw.caption ? fields.title : (ctx.hintTitle ?? fields.title);
         return ready({ ...fields, title, canonicalUrl }, 'embed');
       }
       partial = fields;
-      ctx.log('instagram.embed_no_image', { status: embed.status, truncated: embed.truncated === true });
+      ctx.log(raw.broken ? 'instagram.embed_broken' : 'instagram.embed_no_image', {
+        status: embed.status,
+        truncated: embed.truncated === true,
+      });
     } else {
       ctx.log('instagram.embed_rejected', { status: embed.status, landing });
     }
@@ -343,10 +349,10 @@ async function runInstagram(ctx: ProviderCtx): Promise<ProviderOutcome> {
     }
   }
 
-  // 3) 폰(주거용 IP) 이 같은 임베드 URL 을 같은 파서로
+  // 3) 폰(주거용 IP) 이 같은 파서로 — 임베드가 깨진 글은 폰도 깨진 임베드를 받으니 게시물 페이지를 읽게 한다
   return needsClient(
     'instagram:embed_empty',
-    embedUrl,
+    embedBroken ? canonicalUrl : embedUrl,
     'fetch',
     'instagram_embed',
     partial ? { ...partial, canonicalUrl } : emptyFields({ siteName: 'Instagram', canonicalUrl }),

@@ -18,7 +18,7 @@
 ## 검증 명령
 - 타입: `bunx tsc --noEmit -p .`
 - 린트: `bun run lint` (경고 0 목표)
-- Edge Function 테스트: `bun test supabase/functions/link-preview`
+- Edge Function 테스트: `bun test ./supabase/functions/link-preview/__tests__/*.test.ts` (디렉터리 인자는 bun 1.3.5 에서 EMFILE)
 - RN 자동 테스트는 아직 없다 → spec 의 "검증" 섹션에 적은 시뮬레이터 체크로 대신한다.
 
 ## 시뮬레이터 검증 (iOS, AXe)

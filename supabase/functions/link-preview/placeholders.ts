@@ -25,6 +25,8 @@ export const PLACEHOLDER_IMAGE_PATTERNS: RegExp[] = [
   /^https?:\/\/i\.ytimg\.com\/img\/no_thumbnail\.jpg/i,
   // Instagram·Threads 프로필 아바타 경로 (t51.82787-19 / t51.2885-19). 게시물 미디어는 -15 다.
   /\/t51\.(?:82787|2885)-19\//i,
+  // Instagram 정적 자산(로고) — 데이터센터 IP 가 받는 앱 셸 페이지의 og:image (2026-11-17 운영 관측)
+  /^https?:\/\/static\.cdninstagram\.com\/rsrc\.php\//i,
   // Facebook 정적 자산
   /^https?:\/\/static\.xx\.fbcdn\.net\/rsrc\.php\//i,
   /^https?:\/\/www\.facebook\.com\/images\/fb_icon_\d+x\d+\.png/i,

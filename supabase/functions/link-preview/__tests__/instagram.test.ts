@@ -345,14 +345,54 @@ describe('instagramAdapter.run', () => {
     expect(out.fields.title).toBe('힌트 제목');
   });
 
-  test('EmbedBrokenMedia → unsupported(gone), 페이지 폴백 없이 끝', async () => {
-    const { io, calls } = makeIo({ [instagramEmbedUrl('DHAfcsvMXwT')]: { text: EMBED_BROKEN } });
+  // 2026-11-17 운영 관측: 임베드를 막은 글(DSASjI_km3m 등)도 EmbedBrokenMedia 를 준다 — 삭제 판정은 페이지(프로필 리다이렉트)로만
+  test('EmbedBrokenMedia + 게시물 페이지 살아 있음(임베드 비허용 글) → 페이지 og 폴백 ready(og)', async () => {
+    const { io, calls } = makeIo({ [EMBED_URL]: { text: EMBED_BROKEN }, [POST_URL]: { text: PAGE_LIVE } });
     const out = expectKind(
-      await instagramAdapter.run(makeCtx(instagramAdapter, 'https://www.instagram.com/p/DHAfcsvMXwT/', io)),
-      'unsupported',
+      await instagramAdapter.run(makeCtx(instagramAdapter, POST_URL, io, { hintTitle: '공유 텍스트 힌트' })),
+      'ready',
     );
+    expect(out.source).toBe('og');
+    expect(out.fields.title).toBe('공유 텍스트 힌트');
+    expect(out.fields.author).toBe('쥬블리홈 | 집꾸미기•살림템•꿀템 (@jewvely_home)');
+    expect(out.fields.imageCandidates).toHaveLength(1);
+    expect(calls.map((c) => c.url)).toEqual([EMBED_URL, POST_URL]);
+  });
+
+  test('EmbedBrokenMedia + 페이지가 프로필로 리다이렉트(삭제·비공개) → unsupported(gone)', async () => {
+    const { io } = makeIo({
+      [EMBED_URL]: { text: EMBED_BROKEN },
+      [POST_URL]: {
+        finalUrl: 'https://www.instagram.com/flovefromis_9forever/',
+        text: '<html><head><title>Instagram</title></head></html>',
+      },
+    });
+    const out = expectKind(await instagramAdapter.run(makeCtx(instagramAdapter, POST_URL, io)), 'unsupported');
     expect(out.error).toBe('gone');
-    expect(calls).toHaveLength(1);
+  });
+
+  // 2026-11-17 운영 관측(post 270·298): 데이터센터 IP 에는 게시물 대신 앱 셸을 주고 og:image 가 인스타 로고(rsrc.php) —
+  // 로고를 썸네일로 저장하면 안 된다(제목도 없는 ready 가 된다)
+  test('EmbedBrokenMedia + 페이지가 앱 셸(og:image = static.cdninstagram.com/rsrc.php 로고) → needs_client', async () => {
+    const shell =
+      `<!DOCTYPE html><html><head><title>Instagram</title>` +
+      `<meta property="og:image" content="https://static.cdninstagram.com/rsrc.php/yj/r/f01UdNyJjJj.webp" />` +
+      `</head><body></body></html>`;
+    const { io } = makeIo({ [EMBED_URL]: { text: EMBED_BROKEN }, [POST_URL]: { text: shell } });
+    const out = expectKind(await instagramAdapter.run(makeCtx(instagramAdapter, POST_URL, io)), 'needs_client');
+    expect(out.task).toEqual({ runner: 'fetch', parser: 'instagram_embed', url: POST_URL });
+  });
+
+  test('EmbedBrokenMedia + 페이지 로그인 리다이렉트 → needs_client(폰은 임베드가 아니라 게시물 페이지를 읽는다)', async () => {
+    const { io } = makeIo({
+      [EMBED_URL]: { text: EMBED_BROKEN },
+      [POST_URL]: {
+        finalUrl: 'https://www.instagram.com/accounts/login/?next=%2Fp%2FDI3R5NfBWn_%2F',
+        text: '<html></html>',
+      },
+    });
+    const out = expectKind(await instagramAdapter.run(makeCtx(instagramAdapter, POST_URL, io)), 'needs_client');
+    expect(out.task).toEqual({ runner: 'fetch', parser: 'instagram_embed', url: POST_URL });
   });
 
   test('임베드에 EmbeddedMediaImage 없음 → 게시물 페이지 og 폴백(ready og): 임베드 캡션 제목 + 페이지 author·이미지', async () => {
